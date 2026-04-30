@@ -333,6 +333,21 @@ Tests cover set, get, duplicate-key rejection, steal, rehash growth, foreach
 iteration, foreach early stop, destroy callbacks, clear, destroy, and bucket
 rounding.
 
+### `pyarena.c`
+
+CPython's arena owns linked raw-memory blocks and a list of Python objects that
+stay alive until the arena is freed. The Go port keeps the linked block model
+with `Arena`, `arenaBlock`, and block-local offsets.
+
+`Malloc` rounds each allocation up to the same 8-byte alignment. If the current
+block cannot fit the request, it links a new block. Oversized requests allocate
+a one-off block sized to the rounded request, matching CPython's branch.
+`AddObject` records objects until `Free`, which clears blocks and retained
+objects and makes later arena use invalid.
+
+Tests cover aligned allocation sizes, default block use, oversized block
+allocation, object retention, free cleanup, and use-after-free rejection.
+
 ## Commit Plan
 
 1. Spec commit.
