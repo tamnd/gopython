@@ -3,7 +3,6 @@
 package pyos
 
 import (
-	"errors"
 	"syscall"
 	"testing"
 	"unsafe"
@@ -82,10 +81,6 @@ func closeCRTFD(t *testing.T, fd int) {
 	t.Helper()
 	r1, _, err := procCRTclose.Call(uintptr(fd))
 	if int32(r1) == -1 {
-		errno, ok := crtErrno()
-		if ok && errors.Is(errno, syscall.EBADF) {
-			return
-		}
 		t.Fatalf("_close(%d) failed: %v", fd, err)
 	}
 }
@@ -99,9 +94,6 @@ func crtWriteAll(fd int, data []byte) error {
 		)
 		n := int(int32(r1))
 		if n == -1 {
-			if errno, ok := crtErrno(); ok {
-				return errno
-			}
 			if err != syscall.Errno(0) {
 				return err
 			}
@@ -123,9 +115,6 @@ func crtReadExact(fd int, size int) ([]byte, error) {
 		)
 		n := int(int32(r1))
 		if n == -1 {
-			if errno, ok := crtErrno(); ok {
-				return nil, errno
-			}
 			if err != syscall.Errno(0) {
 				return nil, err
 			}
