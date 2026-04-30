@@ -32,7 +32,7 @@ Phase 1 covers exactly these CPython files:
 | `mysnprintf.c` | `pycore` | Exact for Go formatting boundary |
 | `mystrtoul.c` | `pycore` | Exact for unsigned and signed long parsing |
 | `pystrhex.c` | `pycore` | Exact |
-| `pyhash.c` | `pycore` | Exact helpers, structural keyed hash |
+| `pyhash.c` | `pycore` | Exact |
 | `pymath.c` | `pycore` | Exact |
 | `pyfpe.c` | `pycore` | Structural no-op |
 | `getcopyright.c` | `pycore` | Exact |
@@ -153,6 +153,22 @@ return values.
 
 Tests cover no separator, positive grouping, negative grouping, oversize
 grouping, byte return values, and separator validation.
+
+### `pyhash.c`
+
+CPython keeps hash helpers in one file so equal numeric values keep equal
+hashes across types. The Go port implements double hashing, pointer hashing,
+SipHash13 buffer hashing, keyed hashing, and hash function metadata.
+
+`HashDouble` follows CPython's finite-float reduction modulo
+`2**_PyHASH_BITS - 1`, infinity handling, NaN fallback, sign handling, and the
+reserved `-1` to `-2` rewrite. `HashBuffer` keeps the empty-buffer zero case
+and the reserved `-1` rewrite. `KeyedHash` ports `_Py_KeyedHash` using
+SipHash13 with the second key lane set to zero.
+
+Tests cover finite floats, signed `-1`, infinities, NaN fallback, pointer hash
+reserved-value handling, empty buffers, a fixed zero-secret SipHash13 result, a
+fixed keyed result, and function metadata.
 
 ### `mysnprintf.c`
 
