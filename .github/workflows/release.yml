@@ -1,0 +1,39 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.x"
+          cache: true
+
+      - name: Build
+        run: |
+          mkdir -p dist
+          GOOS=linux GOARCH=amd64 go build -o dist/gopython-linux-amd64 ./cmd/gopython
+          GOOS=linux GOARCH=arm64 go build -o dist/gopython-linux-arm64 ./cmd/gopython
+          GOOS=darwin GOARCH=amd64 go build -o dist/gopython-darwin-amd64 ./cmd/gopython
+          GOOS=darwin GOARCH=arm64 go build -o dist/gopython-darwin-arm64 ./cmd/gopython
+          GOOS=windows GOARCH=amd64 go build -o dist/gopython-windows-amd64.exe ./cmd/gopython
+          cd dist
+          shasum -a 256 * > checksums.txt
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
