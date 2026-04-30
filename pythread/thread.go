@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -15,6 +16,7 @@ const (
 var (
 	threadInitialized atomic.Bool
 	threadStackSize   atomic.Uint64
+	nextThreadID      atomic.Uint64
 	threadInitHook    = func() {}
 )
 
@@ -40,9 +42,23 @@ type Info struct {
 	Version string
 }
 
+type ThreadIdent uint64
+
+const InvalidThreadID ThreadIdent = 0
+
+type ThreadHandle struct {
+	done     chan struct{}
+	mu       sync.Mutex
+	detached bool
+	joined   bool
+}
+
 func InitThread() {
 	if !threadInitialized.CompareAndSwap(false, true) {
 		return
+	}
+	if nextThreadID.Load() == 0 {
+		nextThreadID.Store(1)
 	}
 	threadInitHook()
 }
@@ -156,6 +172,72 @@ func GetInfo() Info {
 		Lock:    lock,
 		Version: "",
 	}
+}
+
+func StartJoinableThread(fn func(any), arg any) (ThreadIdent, *ThreadHandle, error) {
+	if fn == nil {
+		return InvalidThreadID, nil, errors.New("thread function must not be nil")
+	}
+	if !threadInitialized.Load() {
+		InitThread()
+	}
+
+	handle := &ThreadHandle{done: make(chan struct{})}
+	id := ThreadIdent(nextThreadID.Add(1))
+	go func() {
+		defer close(handle.done)
+		fn(arg)
+	}()
+	return id, handle, nil
+}
+
+func StartNewThread(fn func(any), arg any) ThreadIdent {
+	id, handle, err := StartJoinableThread(fn, arg)
+	if err != nil {
+		return InvalidThreadID
+	}
+	_ = handle.Detach()
+	return id
+}
+
+func (h *ThreadHandle) Join() error {
+	if h == nil {
+		return errors.New("thread handle is nil")
+	}
+
+	h.mu.Lock()
+	if h.detached {
+		h.mu.Unlock()
+		return errors.New("thread handle is detached")
+	}
+	if h.joined {
+		h.mu.Unlock()
+		return errors.New("thread handle already joined")
+	}
+	h.joined = true
+	done := h.done
+	h.mu.Unlock()
+
+	<-done
+	return nil
+}
+
+func (h *ThreadHandle) Detach() error {
+	if h == nil {
+		return errors.New("thread handle is nil")
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.joined {
+		return errors.New("thread handle already joined")
+	}
+	if h.detached {
+		return nil
+	}
+	h.detached = true
+	return nil
 }
 
 func timeoutMaxMicroseconds() int64 {

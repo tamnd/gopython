@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 type fakeTimedLocker struct {
@@ -138,5 +139,61 @@ func TestGetInfo(t *testing.T) {
 	}
 	if runtime.GOOS != "windows" && runtime.GOOS != "js" && info.Lock != "mutex+cond" {
 		t.Fatalf("lock name = %q, want mutex+cond", info.Lock)
+	}
+}
+
+func TestStartJoinableThreadAndJoin(t *testing.T) {
+	threadInitialized = atomic.Bool{}
+	nextThreadID = atomic.Uint64{}
+
+	done := make(chan any, 1)
+	ident, handle, err := StartJoinableThread(func(arg any) {
+		done <- arg
+	}, "value")
+	if err != nil {
+		t.Fatalf("StartJoinableThread returned error: %v", err)
+	}
+	if ident == InvalidThreadID {
+		t.Fatal("joinable thread should return a valid ident")
+	}
+	if err := handle.Join(); err != nil {
+		t.Fatalf("Join returned error: %v", err)
+	}
+	if got := <-done; got != "value" {
+		t.Fatalf("thread argument = %v, want value", got)
+	}
+}
+
+func TestStartNewThreadDetachesHandle(t *testing.T) {
+	threadInitialized = atomic.Bool{}
+	nextThreadID = atomic.Uint64{}
+
+	done := make(chan struct{}, 1)
+	ident := StartNewThread(func(arg any) {
+		done <- struct{}{}
+	}, nil)
+	if ident == InvalidThreadID {
+		t.Fatal("StartNewThread returned invalid ident")
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("detached thread did not run")
+	}
+}
+
+func TestThreadHandleErrors(t *testing.T) {
+	_, handle, err := StartJoinableThread(func(any) {}, nil)
+	if err != nil {
+		t.Fatalf("StartJoinableThread returned error: %v", err)
+	}
+	if err := handle.Detach(); err != nil {
+		t.Fatalf("Detach returned error: %v", err)
+	}
+	if err := handle.Join(); err == nil {
+		t.Fatal("Join should fail after detach")
+	}
+	if _, _, err := StartJoinableThread(nil, nil); err == nil {
+		t.Fatal("nil thread function should fail")
 	}
 }
