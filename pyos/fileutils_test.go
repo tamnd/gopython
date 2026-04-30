@@ -1,6 +1,7 @@
 package pyos
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -147,6 +148,34 @@ func TestGetSetInheritable(t *testing.T) {
 		if got != inheritable {
 			t.Fatalf("GetInheritable after SetInheritable(%t) = %t", inheritable, got)
 		}
+	}
+}
+
+func TestOpenFileAndValidFD(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "opened.txt")
+	file, err := OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0o600)
+	if err != nil {
+		t.Fatalf("OpenFile returned error: %v", err)
+	}
+	fd := int(file.Fd())
+	if !IsValidFD(fd) {
+		t.Fatal("IsValidFD should report the opened file descriptor as valid")
+	}
+	inheritable, err := GetInheritable(fd)
+	if err != nil {
+		t.Fatalf("GetInheritable on opened file returned error: %v", err)
+	}
+	if inheritable {
+		t.Fatal("OpenFile should clear inheritable on the returned descriptor")
+	}
+	if _, err := io.WriteString(file, "hello"); err != nil {
+		t.Fatalf("WriteString returned error: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("Close returned error: %v", err)
+	}
+	if IsValidFD(fd) {
+		t.Fatal("IsValidFD should report a closed descriptor as invalid")
 	}
 }
 

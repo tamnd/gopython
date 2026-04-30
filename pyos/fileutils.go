@@ -125,6 +125,29 @@ func SetInheritable(fd int, inheritable bool) error {
 	return setInheritable(fd, inheritable)
 }
 
+func IsValidFD(fd int) bool {
+	if fd < 0 {
+		return false
+	}
+	return isValidFD(fd)
+}
+
+func OpenFile(path string, flag int, perm fs.FileMode) (*os.File, error) {
+	file, err := os.OpenFile(path, flag, perm)
+	if err != nil {
+		return nil, err
+	}
+	if err := SetInheritable(int(file.Fd()), false); err != nil {
+		file.Close()
+		return nil, err
+	}
+	return file, nil
+}
+
+func OpenFileNoRaise(path string, flag int, perm fs.FileMode) (*os.File, error) {
+	return OpenFile(path, flag, perm)
+}
+
 func GetForceASCII() int {
 	if forceASCIICache == -1 {
 		if checkForceASCII() {

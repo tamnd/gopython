@@ -24,3 +24,8 @@ func setInheritable(fd int, inheritable bool) error {
 		flags,
 	)
 }
+
+func isValidFD(fd int) bool {
+	var flags uint32
+	return windows.GetHandleInformation(windows.Handle(fd), &flags) == nil
+}

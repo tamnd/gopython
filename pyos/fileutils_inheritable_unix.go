@@ -29,3 +29,8 @@ func setInheritable(fd int, inheritable bool) error {
 	_, err = unix.FcntlInt(uintptr(fd), unix.F_SETFD, newFlags)
 	return err
 }
+
+func isValidFD(fd int) bool {
+	_, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0)
+	return err == nil
+}
