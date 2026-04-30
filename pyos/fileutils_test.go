@@ -3,6 +3,7 @@ package pyos
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -119,5 +120,55 @@ func TestStatWrappersAndFstat(t *testing.T) {
 func TestSetInheritableRejectsInvalidFD(t *testing.T) {
 	if err := SetInheritable(-1, false); err == nil {
 		t.Fatal("SetInheritable should reject invalid fd")
+	}
+}
+
+func TestDecodeLocaleSurrogateEscape(t *testing.T) {
+	got, err := DecodeLocale([]byte{'a', 0xff, 'b'})
+	if err != nil {
+		t.Fatalf("DecodeLocale returned error: %v", err)
+	}
+	want := []rune{'a', 0xdcff, 'b'}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("DecodeLocale = %#v, want %#v", got, want)
+	}
+
+	if _, err := DecodeLocaleEx([]byte{0xff}, false, ErrorStrict); err == nil {
+		t.Fatal("DecodeLocaleEx strict should fail on invalid byte")
+	}
+}
+
+func TestEncodeLocaleSurrogateEscape(t *testing.T) {
+	got, err := EncodeLocale([]rune{'a', 0xdc80, 'b'})
+	if err != nil {
+		t.Fatalf("EncodeLocale returned error: %v", err)
+	}
+	want := []byte{'a', 0x80, 'b'}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("EncodeLocale = %#v, want %#v", got, want)
+	}
+
+	if _, err := EncodeLocaleEx([]rune{0xd800}, false, ErrorStrict); err == nil {
+		t.Fatal("EncodeLocaleEx strict should fail on surrogate rune")
+	}
+}
+
+func TestForceASCIIAndLocaleEncoding(t *testing.T) {
+	ResetForceASCII()
+	t.Setenv("LC_ALL", "C.ascii")
+	if got := GetForceASCII(); got != 1 {
+		t.Fatalf("GetForceASCII = %d, want 1", got)
+	}
+	if got := LocaleEncoding(); got != "ascii" {
+		t.Fatalf("LocaleEncoding = %q, want ascii", got)
+	}
+
+	ResetForceASCII()
+	t.Setenv("LC_ALL", "en_US.UTF-8")
+	if got := GetForceASCII(); got != 0 {
+		t.Fatalf("GetForceASCII UTF-8 = %d, want 0", got)
+	}
+	if got := DeviceEncoding(0); got == "" {
+		t.Fatal("DeviceEncoding should return a non-empty encoding for valid fd")
 	}
 }
