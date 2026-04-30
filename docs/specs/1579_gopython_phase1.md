@@ -317,6 +317,22 @@ increment `TLBCGeneration`, matching the C generation counter updates.
 Tests cover sequential allocation, free-order independent reuse in sorted
 order, generation increments, and `Fini` reset behavior.
 
+### `hashtable.c`
+
+CPython's `_Py_hashtable_t` uses a power-of-two bucket array and singly linked
+entries. The Go port keeps that structure in `HashTable` instead of using a Go
+map, because insertion order inside buckets, rehash thresholds, steal behavior,
+and destroy callbacks are part of the source logic.
+
+`Set` prepends entries to buckets and grows when load is above `0.50`. `Steal`
+removes an entry without calling destroy callbacks and shrinks through the same
+rehash path when load falls below `0.10`. `Clear` calls destroy callbacks,
+empties every bucket, and rehashes back to the minimum bucket count.
+
+Tests cover set, get, duplicate-key rejection, steal, rehash growth, foreach
+iteration, foreach early stop, destroy callbacks, clear, destroy, and bucket
+rounding.
+
 ## Commit Plan
 
 1. Spec commit.
