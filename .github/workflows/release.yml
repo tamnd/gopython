@@ -1,0 +1,98 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build ${{ matrix.goos }} ${{ matrix.goarch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            ext: ""
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            ext: ""
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            ext: ""
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            ext: ""
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            ext: ".exe"
+          - os: windows-latest
+            goos: windows
+            goarch: arm64
+            ext: ".exe"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.x"
+          cache: true
+
+      - name: Build
+        shell: bash
+        run: |
+          mkdir -p dist
+          name="gopython-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o "dist/$name" ./cmd/gopython
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: gopython-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/gopython-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          archive: false
+
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download binaries
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Prepare release files
+        shell: bash
+        run: |
+          notes="docs/releases/${GITHUB_REF_NAME}.md"
+          if [ ! -f "$notes" ]; then
+            echo "missing hand-written release notes: $notes" >&2
+            exit 1
+          fi
+          chmod +x dist/gopython-linux-* dist/gopython-darwin-*
+          cd dist
+          shasum -a 256 * > checksums.txt
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: gopython ${{ github.ref_name }}
+          body_path: docs/releases/${{ github.ref_name }}.md
+          files: dist/*
