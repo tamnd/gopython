@@ -93,6 +93,176 @@ pycore/
 - Do not mark a structural dependency as exact.
 - Each source file gets tests in the same commit as the port.
 
+## Port Notes
+
+### `README`
+
+The CPython file is a one-line description of the `Python/` directory. The Go
+port stores the exact line in `pycore.PythonDirectoryReadme`. This keeps the
+inventory visible without adding runtime behavior.
+
+Tests assert the string byte-for-byte, including the trailing newline.
+
+### `config_common.h`
+
+The C helpers read required keys from a Python dict and report a missing key or
+invalid type. Phase 1 does not have Python objects yet, so the Go port uses
+`map[string]any` as the direct structural stand-in.
+
+`ConfigDictGet` returns the stored value or the same missing-key message shape.
+`ConfigDictInvalidType` returns the invalid-type message. Later object-model
+work can replace `map[string]any` with a real Python dict without changing the
+caller contract.
+
+Tests cover existing keys, missing keys, and invalid-type errors.
+
+### `pyctype.c`
+
+CPython defines locale-independent byte classification tables and case maps.
+The Go port builds the same 256-entry classification behavior at init time.
+Only ASCII letters, digits, hex digits, and whitespace receive flags. Bytes
+above `0x7f` keep zero flags and map to themselves.
+
+`Charmask`, `IsLower`, `IsUpper`, `IsAlpha`, `IsDigit`, `IsXDigit`,
+`IsAlnum`, `IsSpace`, `ToLower`, and `ToUpper` mirror the C macros.
+
+Tests cover all ASCII class ranges, punctuation negatives, high-byte identity,
+and signed-byte masking with `Charmask(-1)`.
+
+### `pystrcmp.c`
+
+CPython compares NUL-terminated byte strings with ASCII-only lowercasing. The
+Go port treats the end of a Go string as the implicit NUL and stops at explicit
+`\x00` bytes, matching the C loop.
+
+`MyStrICmp` and `MyStrNICmp` preserve CPython return semantics by returning the
+difference between lowercased bytes, not only `-1`, `0`, or `1`.
+
+Tests cover equal case-insensitive strings, ordering, size-limited comparison,
+zero-size comparison, and embedded NUL termination.
+
+### `pystrhex.c`
+
+CPython hex-encodes bytes with optional grouping separators. Positive grouping
+places separators from the right. Negative grouping places separators from the
+left. Groups larger than the input disable separators.
+
+The Go port keeps those branches in `strHexImpl`. Public helpers return either
+`string` or `[]byte`, matching the C distinction between unicode and bytes
+return values.
+
+Tests cover no separator, positive grouping, negative grouping, oversize
+grouping, byte return values, and separator validation.
+
+### `mysnprintf.c`
+
+CPython wraps `vsnprintf` so the last byte is always NUL and the return value
+is the full formatted length. Go does not expose C varargs, so Phase 1 maps the
+formatting boundary to `fmt.Sprintf` while preserving buffer truncation and
+termination rules.
+
+`PyOSSnprintf` panics on an empty buffer because the C API asserts that the
+buffer is non-null and size is positive.
+
+Tests cover fitting writes, truncated writes, final NUL termination, returned
+length, and the empty-buffer assertion.
+
+### `mystrtoul.c`
+
+CPython implements base-aware unsigned and signed long parsing without locale
+dependencies. The Go port uses 64-bit `long` and `unsigned long` semantics,
+matching the checked-in CPython 3.14 source configuration used for this port.
+
+`PyOSStrtoul` preserves whitespace skipping, explicit base handling, `0x`,
+`0o`, and `0b` prefix rules, invalid-prefix end offsets, leading-zero behavior,
+digit limits, overflow spooling, and `ERANGE` behavior through `ErrRange`.
+
+`PyOSStrtol` preserves sign handling, `LONG_MIN`, `LONG_MAX`, and overflow
+mapping.
+
+Tests cover base detection, invalid bases, invalid prefixes, leading-zero
+behavior, unsigned overflow, signed min and max, and signed overflow.
+
+### `pymath.c`
+
+The CPython file only defines x87 control-word helpers when a specific x86
+assembly feature is enabled. Go does not expose that FPU control word portably,
+and Phase 1 does not need it.
+
+The port records this as structural behavior. No public x87 API is exposed
+until a later platform-specific requirement appears.
+
+### `pyfpe.c`
+
+CPython keeps stable-ABI floating-point exception symbols after removing
+`--with-fpectl`. The live behavior is only `PyFPE_dummy`, which returns `1.0`.
+
+The Go port exposes `PyFPEdummy` with the same return behavior. The obsolete
+setjmp storage is intentionally not modeled because Go has no stable ABI
+extension surface in Phase 1.
+
+Tests assert the return value.
+
+### `getcopyright.c`
+
+The C file returns a fixed manually maintained copyright string. The Go port
+stores the same text as a package constant and returns it from
+`PyGetCopyright`.
+
+Tests assert representative stable content.
+
+### `getcompiler.c`
+
+CPython returns a compiler identification string selected by preprocessor
+macros. The Go port has no C compiler in normal builds, so it returns the Go
+toolchain identity as `[Go <runtime.Version()>]`.
+
+This keeps the same role as CPython's API: a short build-tool identifier.
+
+Tests compare the value with `runtime.Version()`.
+
+### `getplatform.c`
+
+CPython returns the configured `PLATFORM` macro. The Go port maps that role to
+`runtime.GOOS`, which is the build platform identifier available in normal Go
+builds.
+
+Tests compare the value with `runtime.GOOS`.
+
+### `getversion.c`
+
+CPython builds a cached version string from `PY_VERSION`, build info, and the
+compiler string. The Go port keeps the same constants from `patchlevel.h`,
+including `PY_VERSION_HEX`, and lazily builds `PyGetVersion`.
+
+`PyGetBuildInfo` uses CPython's fallback values from `getbuildinfo.c`:
+`main, Jan 01 1970, 00:00:00`.
+
+Tests cover `PY_VERSION`, `PY_VERSION_HEX`, build info, and version prefix.
+
+### `stdlib_module_names.h`
+
+The CPython file is generated data for `sys.stdlib_module_names`. The Go port
+checks in the same sorted list as `pycore.StdlibModuleNames` and builds a set
+for membership checks.
+
+Tests assert the exact count, strict sortedness, known positive modules, and
+known non-stdlib negatives.
+
+### `suggestions.c`
+
+CPython uses a bounded Levenshtein edit cost for attribute and name
+suggestions. The Go port keeps the same constants, substitution cost, common
+affix trimming, max string size rule, quick-fail rule, one-row dynamic
+programming buffer, and best-candidate selection rule.
+
+`UTF8EditCost` operates on UTF-8 bytes like the C source. `CalculateSuggestion`
+uses `[]string` in place of Python lists until the object model exists.
+
+Tests cover exact matches, case-only edits, substitutions, insertions,
+max-cost early failure, candidate-list limits, skipped exact candidates, and
+far-match rejection.
+
 ## Commit Plan
 
 1. Spec commit.
