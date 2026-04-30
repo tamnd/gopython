@@ -123,6 +123,33 @@ func TestSetInheritableRejectsInvalidFD(t *testing.T) {
 	}
 }
 
+func TestGetSetInheritable(t *testing.T) {
+	file, err := os.CreateTemp(t.TempDir(), "inheritable")
+	if err != nil {
+		t.Fatalf("CreateTemp returned error: %v", err)
+	}
+	defer file.Close()
+
+	fd := int(file.Fd())
+	original, err := GetInheritable(fd)
+	if err != nil {
+		t.Fatalf("GetInheritable returned error: %v", err)
+	}
+
+	for _, inheritable := range []bool{false, true, original} {
+		if err := SetInheritable(fd, inheritable); err != nil {
+			t.Fatalf("SetInheritable(%t) returned error: %v", inheritable, err)
+		}
+		got, err := GetInheritable(fd)
+		if err != nil {
+			t.Fatalf("GetInheritable after SetInheritable(%t) returned error: %v", inheritable, err)
+		}
+		if got != inheritable {
+			t.Fatalf("GetInheritable after SetInheritable(%t) = %t", inheritable, got)
+		}
+	}
+}
+
 func TestDecodeLocaleSurrogateEscape(t *testing.T) {
 	got, err := DecodeLocale([]byte{'a', 0xff, 'b'})
 	if err != nil {

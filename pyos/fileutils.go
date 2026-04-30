@@ -111,11 +111,18 @@ func WStat(path string) (fs.FileInfo, error) {
 	return os.Stat(path)
 }
 
+func GetInheritable(fd int) (bool, error) {
+	if fd < 0 {
+		return false, errors.New("invalid file descriptor")
+	}
+	return getInheritable(fd)
+}
+
 func SetInheritable(fd int, inheritable bool) error {
 	if fd < 0 {
 		return errors.New("invalid file descriptor")
 	}
-	return nil
+	return setInheritable(fd, inheritable)
 }
 
 func GetForceASCII() int {
