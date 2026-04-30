@@ -1,6 +1,6 @@
 ---
 title: gopython phase 1 - core helper ports
-status: draft
+status: ready
 created: 2026-04-30
 project: gopython
 phase: 1
