@@ -77,8 +77,32 @@ func ReadLink(path string) (string, error) {
 	return os.Readlink(path)
 }
 
+func WReadLink(path []rune) ([]rune, error) {
+	nativePath, err := runesToNativePath(path)
+	if err != nil {
+		return nil, err
+	}
+	link, err := ReadLink(nativePath)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeLocale([]byte(link))
+}
+
 func RealPath(path string) (string, error) {
 	return filepath.EvalSymlinks(path)
+}
+
+func WRealPath(path []rune) ([]rune, error) {
+	nativePath, err := runesToNativePath(path)
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := RealPath(nativePath)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeLocale([]byte(resolved))
 }
 
 func FstatNoRaise(fd int) (StatInfo, error) {
@@ -106,6 +130,14 @@ func LstatPath(path string) (fs.FileInfo, error) {
 
 func WStat(path string) (fs.FileInfo, error) {
 	return os.Stat(path)
+}
+
+func WStatRunes(path []rune) (fs.FileInfo, error) {
+	nativePath, err := runesToNativePath(path)
+	if err != nil {
+		return nil, err
+	}
+	return os.Stat(nativePath)
 }
 
 func GetInheritable(fd int) (bool, error) {
@@ -143,6 +175,18 @@ func OpenFile(path string, flag int, perm fs.FileMode) (*os.File, error) {
 
 func OpenFileNoRaise(path string, flag int, perm fs.FileMode) (*os.File, error) {
 	return OpenFile(path, flag, perm)
+}
+
+func WAbsPath(path []rune) ([]rune, error) {
+	nativePath, err := runesToNativePath(path)
+	if err != nil {
+		return nil, err
+	}
+	absPath, err := AbsPath(nativePath)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeLocale([]byte(absPath))
 }
 
 func GetForceASCII() int {
@@ -329,4 +373,12 @@ func encodeUTF8WithSurrogates(text []rune, errors ErrorHandler) ([]byte, error) 
 		out.Write(tmp[:n])
 	}
 	return out.Bytes(), nil
+}
+
+func runesToNativePath(path []rune) (string, error) {
+	encoded, err := EncodeLocaleRaw(path)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
 }

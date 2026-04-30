@@ -79,6 +79,22 @@ func TestReadLinkAndRealPath(t *testing.T) {
 	if !os.SameFile(realInfo, targetInfo) {
 		t.Fatalf("RealPath = %q, want same file as %q", real, target)
 	}
+
+	wlink, err := WReadLink([]rune(link))
+	if err != nil {
+		t.Fatalf("WReadLink returned error: %v", err)
+	}
+	if string(wlink) != target {
+		t.Fatalf("WReadLink = %q, want %q", string(wlink), target)
+	}
+
+	wreal, err := WRealPath([]rune(link))
+	if err != nil {
+		t.Fatalf("WRealPath returned error: %v", err)
+	}
+	if string(wreal) != real {
+		t.Fatalf("WRealPath = %q, want %q", string(wreal), real)
+	}
 }
 
 func TestStatWrappersAndFstat(t *testing.T) {
@@ -178,6 +194,30 @@ func TestOpenFileAndValidFD(t *testing.T) {
 	}
 	if IsValidFD(fd) {
 		t.Fatal("IsValidFD should report a closed descriptor as invalid")
+	}
+}
+
+func TestWStatAndWAbsPath(t *testing.T) {
+	file, err := os.CreateTemp(t.TempDir(), "wpath")
+	if err != nil {
+		t.Fatalf("CreateTemp returned error: %v", err)
+	}
+	defer file.Close()
+
+	info, err := WStatRunes([]rune(file.Name()))
+	if err != nil {
+		t.Fatalf("WStatRunes returned error: %v", err)
+	}
+	if info.Name() == "" {
+		t.Fatal("WStatRunes returned empty file name")
+	}
+
+	abs, err := WAbsPath([]rune("."))
+	if err != nil {
+		t.Fatalf("WAbsPath returned error: %v", err)
+	}
+	if string(abs) == "" {
+		t.Fatal("WAbsPath returned empty path")
 	}
 }
 
