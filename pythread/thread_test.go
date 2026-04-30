@@ -123,6 +123,12 @@ func TestTSSLifecycle(t *testing.T) {
 	if !IsTSSCreated(key) {
 		t.Fatal("key should be initialized after CreateTSS")
 	}
+	if SetTSS(key, "value") != 0 {
+		t.Fatal("SetTSS should succeed")
+	}
+	if got := GetTSS(key); got != "value" {
+		t.Fatalf("GetTSS = %v, want value", got)
+	}
 	FreeTSS(key)
 	if IsTSSCreated(key) {
 		t.Fatal("key should be cleared after FreeTSS")
@@ -195,5 +201,57 @@ func TestThreadHandleErrors(t *testing.T) {
 	}
 	if _, _, err := StartJoinableThread(nil, nil); err == nil {
 		t.Fatal("nil thread function should fail")
+	}
+}
+
+func TestTLSLifecycle(t *testing.T) {
+	key := CreateTLSKey()
+	if key <= 0 {
+		t.Fatalf("invalid TLS key: %d", key)
+	}
+	if GetTLSKeyValue(key) != nil {
+		t.Fatal("new TLS key should be empty")
+	}
+	if SetTLSKeyValue(key, "value") != 0 {
+		t.Fatal("SetTLSKeyValue should succeed")
+	}
+	if got := GetTLSKeyValue(key); got != "value" {
+		t.Fatalf("GetTLSKeyValue = %v, want value", got)
+	}
+	DeleteTLSKeyValue(key)
+	if got := GetTLSKeyValue(key); got != nil {
+		t.Fatalf("TLS key after delete value = %v, want nil", got)
+	}
+	DeleteTLSKey(key)
+	if got := GetTLSKeyValue(key); got != nil {
+		t.Fatalf("deleted TLS key should be missing, got %v", got)
+	}
+}
+
+func TestThreadIdAndStackSize(t *testing.T) {
+	prev := currentThreadIdent
+	currentThreadIdent = func() ThreadIdent { return 77 }
+	t.Cleanup(func() { currentThreadIdent = prev })
+
+	if got := GetThreadIdentEx(); got != 77 {
+		t.Fatalf("GetThreadIdentEx = %d, want 77", got)
+	}
+	if got := GetThreadIdent(); got != 77 {
+		t.Fatalf("GetThreadIdent = %d, want 77", got)
+	}
+	if got := GetThreadNativeID(); got != 77 {
+		t.Fatalf("GetThreadNativeID = %d, want 77", got)
+	}
+	if SetStackSize(0) != 0 {
+		t.Fatal("SetStackSize(0) should reset to default")
+	}
+	if SetStackSize(threadMinStackSize) != 0 {
+		t.Fatal("SetStackSize(min) should succeed")
+	}
+	if GetStackSize() != threadMinStackSize {
+		t.Fatalf("stack size = %#x, want %#x", GetStackSize(), threadMinStackSize)
+	}
+	if SetStackSize(threadMinStackSize-1) != -1 {
+		t.Fatal("SetStackSize(below min) should fail")
 	}
 }

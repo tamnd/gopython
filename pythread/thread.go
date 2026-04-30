@@ -34,6 +34,7 @@ type TimedLocker interface {
 
 type TSSKey struct {
 	initialized bool
+	values      sync.Map
 }
 
 type Info struct {
@@ -53,6 +54,16 @@ type ThreadHandle struct {
 	joined   bool
 }
 
+type tlsKey struct {
+	values sync.Map
+}
+
+var (
+	tlsKeysMu  sync.Mutex
+	tlsKeys    = map[int]*tlsKey{}
+	nextTLSKey = 1
+)
+
 func InitThread() {
 	if !threadInitialized.CompareAndSwap(false, true) {
 		return
@@ -67,8 +78,8 @@ func GetStackSize() uint64 {
 	return threadStackSize.Load()
 }
 
-func SetStackSize(uint64) int {
-	return -2
+func SetStackSize(size uint64) int {
+	return setStackSizePlatform(size)
 }
 
 func ParseTimeoutSeconds(seconds *float64, blocking bool) (int64, error) {
@@ -153,7 +164,24 @@ func CreateTSS(key *TSSKey) int {
 func DeleteTSS(key *TSSKey) {
 	if key != nil {
 		key.initialized = false
+		key.values = sync.Map{}
 	}
+}
+
+func SetTSS(key *TSSKey, value any) int {
+	if key == nil || !key.initialized {
+		return -1
+	}
+	key.values.Store(currentThreadIdent(), value)
+	return 0
+}
+
+func GetTSS(key *TSSKey) any {
+	if key == nil || !key.initialized {
+		return nil
+	}
+	value, _ := key.values.Load(currentThreadIdent())
+	return value
 }
 
 func GetInfo() Info {
@@ -171,6 +199,84 @@ func GetInfo() Info {
 		Name:    name,
 		Lock:    lock,
 		Version: "",
+	}
+}
+
+func CreateTLSKey() int {
+	tlsKeysMu.Lock()
+	defer tlsKeysMu.Unlock()
+
+	key := nextTLSKey
+	nextTLSKey++
+	tlsKeys[key] = &tlsKey{}
+	return key
+}
+
+func DeleteTLSKey(key int) {
+	tlsKeysMu.Lock()
+	delete(tlsKeys, key)
+	tlsKeysMu.Unlock()
+}
+
+func DeleteTLSKeyValue(key int) {
+	tlsKeysMu.Lock()
+	entry := tlsKeys[key]
+	tlsKeysMu.Unlock()
+	if entry == nil {
+		return
+	}
+	entry.values.Delete(currentThreadIdent())
+}
+
+func SetTLSKeyValue(key int, value any) int {
+	tlsKeysMu.Lock()
+	entry := tlsKeys[key]
+	tlsKeysMu.Unlock()
+	if entry == nil {
+		return -1
+	}
+	entry.values.Store(currentThreadIdent(), value)
+	return 0
+}
+
+func GetTLSKeyValue(key int) any {
+	tlsKeysMu.Lock()
+	entry := tlsKeys[key]
+	tlsKeysMu.Unlock()
+	if entry == nil {
+		return nil
+	}
+	value, _ := entry.values.Load(currentThreadIdent())
+	return value
+}
+
+func ReInitTLS() {}
+
+func GetThreadIdentEx() ThreadIdent {
+	if !threadInitialized.Load() {
+		InitThread()
+	}
+	return currentThreadIdent()
+}
+
+func GetThreadIdent() uint64 {
+	return uint64(GetThreadIdentEx())
+}
+
+func GetThreadNativeID() uint64 {
+	return uint64(GetThreadIdentEx())
+}
+
+func ExitThread() {
+	if !threadInitialized.Load() {
+		panic("exit 0")
+	}
+	runtime.Goexit()
+}
+
+func HangThread() {
+	for {
+		time.Sleep(24 * time.Hour)
 	}
 }
 
