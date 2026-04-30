@@ -48,10 +48,7 @@ func DeviceEncoding(fd int) string {
 	if fd < 0 {
 		return ""
 	}
-	if runtime.GOOS == "windows" {
-		return LocaleEncoding()
-	}
-	return LocaleEncoding()
+	return deviceEncoding(fd)
 }
 
 func GetCwd() (string, error) {

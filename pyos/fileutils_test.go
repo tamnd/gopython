@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"golang.org/x/term"
 )
 
 func TestGetCwdAndAbsPath(t *testing.T) {
@@ -224,7 +226,17 @@ func TestForceASCIIAndLocaleEncoding(t *testing.T) {
 	if got := GetForceASCII(); got != 0 {
 		t.Fatalf("GetForceASCII UTF-8 = %d, want 0", got)
 	}
-	if got := DeviceEncoding(0); got == "" {
-		t.Fatal("DeviceEncoding should return a non-empty encoding for valid fd")
+	file, err := os.CreateTemp(t.TempDir(), "device-encoding")
+	if err != nil {
+		t.Fatalf("CreateTemp returned error: %v", err)
+	}
+	defer file.Close()
+	if got := DeviceEncoding(int(file.Fd())); got != "" {
+		t.Fatalf("DeviceEncoding(regular file) = %q, want empty string", got)
+	}
+	if term.IsTerminal(0) {
+		if got := DeviceEncoding(0); got == "" {
+			t.Fatal("DeviceEncoding should return a non-empty encoding for a terminal")
+		}
 	}
 }
