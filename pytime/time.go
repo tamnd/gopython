@@ -3,6 +3,9 @@ package pytime
 import (
 	"errors"
 	"math"
+	"runtime"
+	"sync"
+	"time"
 )
 
 const (
@@ -48,11 +51,49 @@ type Timespec struct {
 	Nsec int
 }
 
+type ClockInfo struct {
+	Implementation string
+	Monotonic      bool
+	Adjustable     bool
+	Resolution     float64
+}
+
+type RuntimeState struct {
+	Base Fraction
+}
+
+var (
+	runtimeState RuntimeState
+	initOnce     sync.Once
+	startTime    = time.Now()
+)
+
 func GCD(x, y Time) Time {
 	for y != 0 {
 		x, y = y, x%y
 	}
 	return x
+}
+
+func Init(state *RuntimeState) error {
+	var err error
+	initOnce.Do(func() {
+		switch runtime.GOOS {
+		case "windows":
+			err = runtimeState.Base.Set(Time(SecToNS), 10_000_000)
+		case "darwin":
+			err = runtimeState.Base.Set(1, 1)
+		default:
+			err = runtimeState.Base.Set(1, 1)
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if state != nil {
+		state.Base = runtimeState.Base
+	}
+	return nil
 }
 
 func (f *Fraction) Set(numer, denom Time) error {
@@ -154,6 +195,64 @@ func AsTimeval(ns Time, round RoundMode) (Timeval, error) {
 func AsTimespec(ns Time) (Timespec, error) {
 	sec, nsec, err := divmod(ns, Time(SecToNS))
 	return Timespec{Sec: sec, Nsec: int(nsec)}, err
+}
+
+func TimeNow() (Time, error) {
+	return systemClock(nil)
+}
+
+func TimeNowRaw() (Time, error) {
+	return systemClock(nil)
+}
+
+func TimeWithInfo() (Time, ClockInfo, error) {
+	info := ClockInfo{}
+	t, err := systemClock(&info)
+	return t, info, err
+}
+
+func Monotonic() (Time, error) {
+	return monotonicClock(nil)
+}
+
+func MonotonicRaw() (Time, error) {
+	return monotonicClock(nil)
+}
+
+func MonotonicWithInfo() (Time, ClockInfo, error) {
+	info := ClockInfo{}
+	t, err := monotonicClock(&info)
+	return t, info, err
+}
+
+func PerfCounter() (Time, error) {
+	return Monotonic()
+}
+
+func PerfCounterRaw() (Time, error) {
+	return MonotonicRaw()
+}
+
+func PerfCounterWithInfo() (Time, ClockInfo, error) {
+	return MonotonicWithInfo()
+}
+
+func Localtime(t time.Time) time.Time {
+	return t.Local()
+}
+
+func GMTime(t time.Time) time.Time {
+	return t.UTC()
+}
+
+func DeadlineInit(timeout Time) Time {
+	now, _ := MonotonicRaw()
+	return Add(now, timeout)
+}
+
+func DeadlineGet(deadline Time) Time {
+	now, _ := MonotonicRaw()
+	return deadline - now
 }
 
 func roundHalfEven(x float64) float64 {
@@ -305,4 +404,35 @@ func divmod(t, k Time) (Time, Time, error) {
 		q--
 	}
 	return q, r, nil
+}
+
+func systemClock(info *ClockInfo) (Time, error) {
+	now := time.Now()
+	if info != nil {
+		info.Implementation = "time.Now()"
+		info.Monotonic = false
+		info.Adjustable = true
+		info.Resolution = 1e-9
+	}
+	return Time(now.UnixNano()), nil
+}
+
+func monotonicClock(info *ClockInfo) (Time, error) {
+	if err := Init(nil); err != nil {
+		return 0, err
+	}
+	if info != nil {
+		info.Monotonic = true
+		info.Adjustable = false
+		info.Resolution = runtimeState.Base.Resolution()
+		switch runtime.GOOS {
+		case "windows":
+			info.Implementation = "QueryPerformanceCounter()"
+		case "darwin":
+			info.Implementation = "mach_absolute_time()"
+		default:
+			info.Implementation = "clock_gettime(CLOCK_MONOTONIC)"
+		}
+	}
+	return Time(time.Since(startTime).Nanoseconds()), nil
 }

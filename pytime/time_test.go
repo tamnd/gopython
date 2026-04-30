@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"testing"
+	"time"
 )
 
 func TestFractionSetAndResolution(t *testing.T) {
@@ -108,5 +109,86 @@ func TestErrors(t *testing.T) {
 	}
 	if _, _, err := ObjectToTimespec(math.NaN(), RoundFloor); !errors.Is(err, ErrTimeNaN) {
 		t.Fatalf("unexpected timespec NaN error: %v", err)
+	}
+}
+
+func TestInitAndClockInfo(t *testing.T) {
+	var state RuntimeState
+	if err := Init(&state); err != nil {
+		t.Fatalf("Init returned error: %v", err)
+	}
+	if state.Base.Numer == 0 || state.Base.Denom == 0 {
+		t.Fatalf("invalid base fraction: %+v", state.Base)
+	}
+
+	_, info, err := TimeWithInfo()
+	if err != nil {
+		t.Fatalf("TimeWithInfo returned error: %v", err)
+	}
+	if info.Implementation == "" || info.Monotonic {
+		t.Fatalf("unexpected system info: %+v", info)
+	}
+
+	_, minfo, err := MonotonicWithInfo()
+	if err != nil {
+		t.Fatalf("MonotonicWithInfo returned error: %v", err)
+	}
+	if minfo.Implementation == "" || !minfo.Monotonic || minfo.Adjustable {
+		t.Fatalf("unexpected monotonic info: %+v", minfo)
+	}
+}
+
+func TestTimeAndPerfCounters(t *testing.T) {
+	t1, err := TimeNow()
+	if err != nil {
+		t.Fatalf("TimeNow returned error: %v", err)
+	}
+	t2, err := TimeNowRaw()
+	if err != nil {
+		t.Fatalf("TimeNowRaw returned error: %v", err)
+	}
+	if t2 == 0 || t1 == 0 {
+		t.Fatal("system clock should not be zero")
+	}
+
+	m1, err := Monotonic()
+	if err != nil {
+		t.Fatalf("Monotonic returned error: %v", err)
+	}
+	time.Sleep(2 * time.Millisecond)
+	m2, err := MonotonicRaw()
+	if err != nil {
+		t.Fatalf("MonotonicRaw returned error: %v", err)
+	}
+	if m2 < m1 {
+		t.Fatalf("monotonic clock regressed: %d < %d", m2, m1)
+	}
+
+	p1, err := PerfCounter()
+	if err != nil {
+		t.Fatalf("PerfCounter returned error: %v", err)
+	}
+	p2, err := PerfCounterRaw()
+	if err != nil {
+		t.Fatalf("PerfCounterRaw returned error: %v", err)
+	}
+	if p1 == 0 || p2 == 0 {
+		t.Fatal("perf counters should be non-zero")
+	}
+}
+
+func TestLocaltimeGMTimeAndDeadline(t *testing.T) {
+	ts := time.Unix(1_700_000_000, 123).UTC()
+	if got := GMTime(ts); got.Location() != time.UTC {
+		t.Fatalf("GMTime location = %v, want UTC", got.Location())
+	}
+	if got := Localtime(ts); got.Unix() != ts.Unix() {
+		t.Fatalf("Localtime unix = %d, want %d", got.Unix(), ts.Unix())
+	}
+
+	deadline := DeadlineInit(5 * Time(1_000_000))
+	remaining := DeadlineGet(deadline)
+	if remaining > 5*Time(1_000_000) || remaining < -5*Time(1_000_000) {
+		t.Fatalf("unexpected remaining deadline: %d", remaining)
 	}
 }
