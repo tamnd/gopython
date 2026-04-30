@@ -263,6 +263,44 @@ Tests cover exact matches, case-only edits, substitutions, insertions,
 max-cost early failure, candidate-list limits, skipped exact candidates, and
 far-match rejection.
 
+### `uniqueid.c`
+
+CPython allocates one-based unique IDs from an interpreter-local table and
+returns released entries through a freelist. The Go port keeps the same table
+and freelist model in `UniqueIDPool`.
+
+`Assign` grows the table from zero to eight entries, then doubles capacity.
+`Release` pushes the released ID to the freelist, so reuse follows the same
+LIFO behavior as CPython. `Finalize` clears the table and freelist.
+
+Tests cover first allocation, object lookup, release, ID reuse, resize from the
+minimum pool size, and finalization.
+
+### `object_stack.c`
+
+CPython stores objects in linked chunks of 254 entries so each chunk has a
+power-of-two size. The Go port keeps the chunk size and linked-list structure
+with a generic `ObjectStack[T]`.
+
+`Push`, `Pop`, `Size`, `Merge`, and `Clear` follow the C header and source
+logic. `Merge` appends the destination chain to the bottom of the source chain,
+then moves the source head into the destination and clears the source.
+
+Tests cover empty pop, chunk rollover, LIFO order, merge order, source clearing,
+and clear behavior.
+
+### `index_pool.c`
+
+CPython allocates monotonically increasing indices and reuses freed indices via
+a min-heap. The Go port keeps that heap behavior in `IndexPool`.
+
+`AllocIndex` returns the smallest available freed index, or the next new index
+when the heap is empty. `FreeIndex` adds an index to the heap. Both operations
+increment `TLBCGeneration`, matching the C generation counter updates.
+
+Tests cover sequential allocation, free-order independent reuse in sorted
+order, generation increments, and `Fini` reset behavior.
+
 ## Commit Plan
 
 1. Spec commit.
