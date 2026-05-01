@@ -1,7 +1,9 @@
 package pythread
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"math"
 	"runtime"
 	"sync"
@@ -18,6 +20,7 @@ var (
 	threadStackSize   atomic.Uint64
 	nextThreadID      atomic.Uint64
 	threadInitHook    = func() {}
+	threadIDs         sync.Map
 )
 
 type LockStatus int
@@ -71,6 +74,7 @@ func InitThread() {
 	if nextThreadID.Load() == 0 {
 		nextThreadID.Store(1)
 	}
+	threadIDs.Store(currentGoroutineID(), ThreadIdent(1))
 	threadInitHook()
 }
 
@@ -252,6 +256,19 @@ func GetTLSKeyValue(key int) any {
 
 func ReInitTLS() {}
 
+func defaultCurrentThreadIdent() ThreadIdent {
+	if !threadInitialized.Load() {
+		InitThread()
+	}
+	gid := currentGoroutineID()
+	if ident, ok := threadIDs.Load(gid); ok {
+		return ident.(ThreadIdent)
+	}
+	ident := ThreadIdent(nextThreadID.Add(1))
+	actual, _ := threadIDs.LoadOrStore(gid, ident)
+	return actual.(ThreadIdent)
+}
+
 func GetThreadIdentEx() ThreadIdent {
 	if !threadInitialized.Load() {
 		InitThread()
@@ -291,6 +308,9 @@ func StartJoinableThread(fn func(any), arg any) (ThreadIdent, *ThreadHandle, err
 	handle := &ThreadHandle{done: make(chan struct{})}
 	id := ThreadIdent(nextThreadID.Add(1))
 	go func() {
+		gid := currentGoroutineID()
+		threadIDs.Store(gid, id)
+		defer threadIDs.Delete(gid)
 		defer close(handle.done)
 		fn(arg)
 	}()
@@ -361,4 +381,24 @@ func timeoutToMicroseconds(timeout int64) int64 {
 		return timeout
 	}
 	return int64(math.Ceil(float64(timeout) / 1000))
+}
+
+func currentGoroutineID() uint64 {
+	var buf [64]byte
+	n := runtime.Stack(buf[:], false)
+	prefix := []byte("goroutine ")
+	stack := buf[:n]
+	if !bytes.HasPrefix(stack, prefix) {
+		panic("unexpected runtime stack header")
+	}
+	stack = stack[len(prefix):]
+	end := bytes.IndexByte(stack, ' ')
+	if end < 0 {
+		panic("unexpected runtime stack header")
+	}
+	var gid uint64
+	if _, err := fmt.Sscanf(string(stack[:end]), "%d", &gid); err != nil {
+		panic("unexpected runtime stack header")
+	}
+	return gid
 }

@@ -2,7 +2,9 @@ package pythread
 
 import (
 	"errors"
+	"fmt"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -151,10 +153,11 @@ func TestGetInfo(t *testing.T) {
 func TestStartJoinableThreadAndJoin(t *testing.T) {
 	threadInitialized = atomic.Bool{}
 	nextThreadID = atomic.Uint64{}
+	threadIDs = sync.Map{}
 
 	done := make(chan any, 1)
 	ident, handle, err := StartJoinableThread(func(arg any) {
-		done <- arg
+		done <- []any{arg, GetThreadIdentEx()}
 	}, "value")
 	if err != nil {
 		t.Fatalf("StartJoinableThread returned error: %v", err)
@@ -165,14 +168,19 @@ func TestStartJoinableThreadAndJoin(t *testing.T) {
 	if err := handle.Join(); err != nil {
 		t.Fatalf("Join returned error: %v", err)
 	}
-	if got := <-done; got != "value" {
-		t.Fatalf("thread argument = %v, want value", got)
+	got := (<-done).([]any)
+	if got[0] != "value" {
+		t.Fatalf("thread argument = %v, want value", got[0])
+	}
+	if got[1] != ident {
+		t.Fatalf("thread ident in goroutine = %v, want %v", got[1], ident)
 	}
 }
 
 func TestStartNewThreadDetachesHandle(t *testing.T) {
 	threadInitialized = atomic.Bool{}
 	nextThreadID = atomic.Uint64{}
+	threadIDs = sync.Map{}
 
 	done := make(chan struct{}, 1)
 	ident := StartNewThread(func(arg any) {
@@ -205,6 +213,9 @@ func TestThreadHandleErrors(t *testing.T) {
 }
 
 func TestTLSLifecycle(t *testing.T) {
+	threadIDs = sync.Map{}
+	threadInitialized = atomic.Bool{}
+	nextThreadID = atomic.Uint64{}
 	key := CreateTLSKey()
 	if key <= 0 {
 		t.Fatalf("invalid TLS key: %d", key)
@@ -225,6 +236,83 @@ func TestTLSLifecycle(t *testing.T) {
 	DeleteTLSKey(key)
 	if got := GetTLSKeyValue(key); got != nil {
 		t.Fatalf("deleted TLS key should be missing, got %v", got)
+	}
+}
+
+func TestTLSIsolationAcrossThreads(t *testing.T) {
+	threadInitialized = atomic.Bool{}
+	nextThreadID = atomic.Uint64{}
+	threadIDs = sync.Map{}
+
+	key := CreateTLSKey()
+	if key <= 0 {
+		t.Fatalf("invalid TLS key: %d", key)
+	}
+	if SetTLSKeyValue(key, "main") != 0 {
+		t.Fatal("SetTLSKeyValue on main thread should succeed")
+	}
+
+	done := make(chan any, 1)
+	_, handle, err := StartJoinableThread(func(any) {
+		if got := GetTLSKeyValue(key); got != nil {
+			done <- fmt.Sprintf("unexpected inherited TLS value %v", got)
+			return
+		}
+		if SetTLSKeyValue(key, "worker") != 0 {
+			done <- "failed to set worker TLS value"
+			return
+		}
+		done <- GetTLSKeyValue(key)
+	}, nil)
+	if err != nil {
+		t.Fatalf("StartJoinableThread returned error: %v", err)
+	}
+	if err := handle.Join(); err != nil {
+		t.Fatalf("Join returned error: %v", err)
+	}
+	if got := <-done; got != "worker" {
+		t.Fatalf("worker TLS value = %v, want worker", got)
+	}
+	if got := GetTLSKeyValue(key); got != "main" {
+		t.Fatalf("main TLS value after worker = %v, want main", got)
+	}
+}
+
+func TestTSSIsolationAcrossThreads(t *testing.T) {
+	threadInitialized = atomic.Bool{}
+	nextThreadID = atomic.Uint64{}
+	threadIDs = sync.Map{}
+
+	key := AllocTSS()
+	if CreateTSS(key) != 0 {
+		t.Fatal("CreateTSS should succeed")
+	}
+	if SetTSS(key, "main") != 0 {
+		t.Fatal("SetTSS on main thread should succeed")
+	}
+	done := make(chan any, 1)
+	_, handle, err := StartJoinableThread(func(any) {
+		if got := GetTSS(key); got != nil {
+			done <- fmt.Sprintf("unexpected inherited TSS value %v", got)
+			return
+		}
+		if SetTSS(key, "worker") != 0 {
+			done <- "failed to set worker TSS value"
+			return
+		}
+		done <- GetTSS(key)
+	}, nil)
+	if err != nil {
+		t.Fatalf("StartJoinableThread returned error: %v", err)
+	}
+	if err := handle.Join(); err != nil {
+		t.Fatalf("Join returned error: %v", err)
+	}
+	if got := <-done; got != "worker" {
+		t.Fatalf("worker TSS value = %v, want worker", got)
+	}
+	if got := GetTSS(key); got != "main" {
+		t.Fatalf("main TSS value after worker = %v, want main", got)
 	}
 }
 

@@ -61,7 +61,7 @@ type SeqLock struct {
 	sequence atomic.Uint32
 }
 
-var currentThreadIdent = func() ThreadIdent { return 1 }
+var currentThreadIdent = defaultCurrentThreadIdent
 
 func (m *PyMutex) key() uintptr {
 	return uintptr(unsafe.Pointer(m))
