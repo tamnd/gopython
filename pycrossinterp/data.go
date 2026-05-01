@@ -14,6 +14,16 @@ func NewXIData() *XIData {
 	return &XIData{InterpID: -1}
 }
 
+func FreeXIData(interpID int64, x *XIData) error {
+	if x == nil {
+		return nil
+	}
+	if err := x.Clear(interpID); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (x *XIData) Init(interpID int64, shared any, obj any, newObject func(any) (any, error)) {
 	*x = XIData{
 		InterpID:  interpID,
@@ -25,6 +35,7 @@ func (x *XIData) Init(interpID int64, shared any, obj any, newObject func(any) (
 
 func (x *XIData) InitWithSize(interpID int64, size int, obj any, newObject func(any) (any, error)) {
 	x.Init(interpID, make([]byte, size), obj, newObject)
+	x.Free = func(any) {}
 }
 
 func (x *XIData) Clear(interpID int64) error {
@@ -60,4 +71,78 @@ func CallInInterpreter(currentID, targetID int64, fn func(any) int, arg any, sch
 		schedule(targetID, fn, arg)
 	}
 	return 0
+}
+
+func CallInInterpreterAndRawFree(currentID, targetID int64, fn func(any) int, arg any, schedule func(int64, func(any) int, any)) int {
+	if currentID == targetID {
+		return fn(arg)
+	}
+	if schedule != nil {
+		schedule(targetID, fn, arg)
+	}
+	return 0
+}
+
+type XIDataFallback int
+
+const (
+	XIDataOnly XIDataFallback = iota + 1
+	XIDataFullFallback
+)
+
+func SetXIDataLookupFailure(obj any, msg string, cause error) error {
+	if msg != "" {
+		return &NotShareableError{Message: msg, Cause: cause}
+	}
+	if obj == nil {
+		return &NotShareableError{Message: "object does not support cross-interpreter data", Cause: cause}
+	}
+	return &NotShareableError{
+		Message: fmt.Sprintf("%v does not support cross-interpreter data", obj),
+		Cause:   cause,
+	}
+}
+
+func ObjectCheckXIData(lookup *LookupState, obj any) error {
+	if lookup == nil {
+		return SetXIDataLookupFailure(obj, "", nil)
+	}
+	getdata := lookup.Lookup(obj)
+	if getdata == nil {
+		return SetXIDataLookupFailure(obj, "", nil)
+	}
+	return nil
+}
+
+func ObjectGetXIData(lookup *LookupState, interpID int64, obj any, fallback XIDataFallback, xidata *XIData) error {
+	if xidata == nil {
+		return fmt.Errorf("missing xidata")
+	}
+	if xidata.Data != nil || xidata.Obj != nil {
+		return fmt.Errorf("xidata not cleared")
+	}
+	if lookup != nil {
+		if getdata := lookup.Lookup(obj); getdata != nil {
+			shared, err := getdata(obj)
+			if err != nil {
+				return SetXIDataLookupFailure(obj, "", err)
+			}
+			xidata.Init(interpID, shared, obj, func(v any) (any, error) {
+				return v.(*XIData).Data, nil
+			})
+			return CheckXIData(xidata)
+		}
+	}
+	switch fallback {
+	case XIDataOnly:
+		return SetXIDataLookupFailure(obj, "", nil)
+	case XIDataFullFallback:
+		if err := PickleToXIData(obj, "", xidata); err == nil {
+			xidata.InterpID = interpID
+			return CheckXIData(xidata)
+		}
+		return SetXIDataLookupFailure(obj, "", nil)
+	default:
+		return fmt.Errorf("unsupported xidata fallback option")
+	}
 }

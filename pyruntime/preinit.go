@@ -14,6 +14,26 @@ type PreInitState struct {
 	Preconfig       pyconfig.PreConfig
 }
 
+func PreInitializeFromBytesArgs(state *PreInitState, src pyconfig.PreConfig, argv [][]byte) error {
+	args := &pyconfig.Argv{
+		UseBytesArgv: true,
+		BytesArgv:    argv,
+	}
+	return PreInitializeFromPyArgv(state, src, args)
+}
+
+func PreInitializeFromArgs(state *PreInitState, src pyconfig.PreConfig, argv [][]rune) error {
+	args := &pyconfig.Argv{
+		UseBytesArgv: false,
+		WideArgv:     argv,
+	}
+	return PreInitializeFromPyArgv(state, src, args)
+}
+
+func PreInitialize(state *PreInitState, src pyconfig.PreConfig) error {
+	return PreInitializeFromPyArgv(state, src, nil)
+}
+
 func PreInitializeFromConfig(config pyconfig.PreConfig, alreadyPreinitialized bool) (bool, error) {
 	if alreadyPreinitialized {
 		return true, nil
@@ -73,6 +93,12 @@ func PreInitializeFromConfigObject(state *PreInitState, config pyconfig.Config, 
 		}
 	}
 	return PreInitializeFromPyArgv(state, preconfig, args)
+}
+
+func IsRuntimeInitialized() bool {
+	lifecycleState.mu.Lock()
+	defer lifecycleState.mu.Unlock()
+	return lifecycleState.runtimeInitialized
 }
 
 func InitCoreFromConfig(runtime *pystate.RuntimeState, config pyconfig.Config, hooks BootstrapHooks, alreadyCore bool) (*BootstrapState, error) {

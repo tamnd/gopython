@@ -19,6 +19,37 @@ func TestPreInitializeFromConfig(t *testing.T) {
 	}
 }
 
+func TestPreInitializeWrappers(t *testing.T) {
+	RuntimeFinalize()
+	state := &PreInitState{}
+	var preconfig pyconfig.PreConfig
+	pyconfig.InitPythonPreConfig(&preconfig)
+	if err := PreInitializeFromBytesArgs(state, preconfig, [][]byte{[]byte("python")}); err != nil {
+		t.Fatalf("PreInitializeFromBytesArgs error: %v", err)
+	}
+	if !state.Preinitialized || !IsRuntimeInitialized() {
+		t.Fatalf("state = %#v", state)
+	}
+
+	RuntimeFinalize()
+	state = &PreInitState{}
+	if err := PreInitializeFromArgs(state, preconfig, [][]rune{[]rune("python")}); err != nil {
+		t.Fatalf("PreInitializeFromArgs error: %v", err)
+	}
+	if !state.Preinitialized {
+		t.Fatalf("state = %#v", state)
+	}
+
+	RuntimeFinalize()
+	state = &PreInitState{}
+	if err := PreInitialize(state, preconfig); err != nil {
+		t.Fatalf("PreInitialize error: %v", err)
+	}
+	if !state.Preinitialized {
+		t.Fatalf("state = %#v", state)
+	}
+}
+
 func TestPreInitializeFromPyArgv(t *testing.T) {
 	RuntimeFinalize()
 	state := &PreInitState{}
