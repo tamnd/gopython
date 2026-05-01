@@ -59,6 +59,7 @@ func FinalizeRuntime(runtime *pystate.RuntimeState, hooks FinalizeHooks) int {
 
 	tstate.Status.Finalizing = true
 	interp := tstate.Interp
+	interp.Finalizing = true
 
 	if hooks.WaitForThreadShutdown != nil {
 		hooks.WaitForThreadShutdown(tstate)
@@ -171,6 +172,7 @@ func EndInterpreter(tstate *pystate.ThreadState, hooks FinalizeHooks) error {
 		return fmt.Errorf("missing runtime")
 	}
 	tstate.Status.Finalizing = true
+	tstate.Interp.Finalizing = true
 	if hooks.WaitForThreadShutdown != nil {
 		hooks.WaitForThreadShutdown(tstate)
 	}

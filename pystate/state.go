@@ -17,6 +17,7 @@ type ThreadState struct {
 	Interp         *InterpreterState
 	ThreadID       uint64
 	NativeThreadID uint64
+	Whence         int
 	Status         ThreadStatus
 }
 
@@ -24,6 +25,8 @@ type InterpreterState struct {
 	ID                int64
 	Runtime           *RuntimeState
 	RunningMain       bool
+	Whence            int
+	Finalizing        bool
 	ContextWatchers   [8]func(any) error
 	ActiveContextBits uint8
 	contextWatchersMu sync.Mutex
