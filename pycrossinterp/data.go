@@ -59,6 +59,13 @@ func (x *XIData) Init(interpID int64, shared any, obj any, newObject func(any) (
 	}
 }
 
+func NewObjectFromXIData(x *XIData) (any, error) {
+	if x == nil || x.NewObject == nil {
+		return nil, fmt.Errorf("missing new_object func")
+	}
+	return x.NewObject(x)
+}
+
 func (x *XIData) InitWithSize(interpID int64, size int, obj any, newObject func(any) (any, error)) {
 	x.Init(interpID, make([]byte, size), obj, newObject)
 	x.Free = func(any) {}

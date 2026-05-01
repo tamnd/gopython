@@ -153,6 +153,13 @@ func TestSessionPreserveAcrossSwitch(t *testing.T) {
 	if got["a"] != float64(1) {
 		t.Fatalf("result = %#v", result)
 	}
+	if GetPreserved(result, "x") == nil {
+		t.Fatalf("GetPreserved = %#v", result)
+	}
+	ClearResult(result)
+	if result.Preserved != nil || result.ExcInfo != nil || result.ErrCode != ErrNoError {
+		t.Fatalf("result after clear = %#v", result)
+	}
 }
 
 func TestApplyErrorCodeAndFailureCapture(t *testing.T) {

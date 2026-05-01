@@ -24,6 +24,44 @@ type ExcSnapshotObject struct {
 	ErrDisplay string
 }
 
+func NewExcInfo(exc any) (*ExcInfo, error) {
+	switch value := exc.(type) {
+	case nil:
+		return nil, fmt.Errorf("missing exc")
+	case ExcSnapshotObject:
+		return InitExcInfoFromObject(value)
+	case *ExcSnapshotObject:
+		if value == nil {
+			return nil, fmt.Errorf("missing exc")
+		}
+		return InitExcInfoFromObject(*value)
+	case error:
+		return InitExcInfoFromException("Exception", "Exception", "builtins", value.Error(), value.Error()), nil
+	default:
+		return InitExcInfoFromException("Exception", "Exception", "builtins", fmt.Sprint(value), fmt.Sprint(value)), nil
+	}
+}
+
+func FreeExcInfo(info *ExcInfo) {
+	if info != nil {
+		info.Clear()
+	}
+}
+
+func FormatExcInfo(info *ExcInfo) string {
+	if info == nil {
+		return ""
+	}
+	return info.Format()
+}
+
+func ExcInfoAsObject(info *ExcInfo) ExcSnapshotObject {
+	if info == nil {
+		return ExcSnapshotObject{}
+	}
+	return info.AsObject()
+}
+
 func (info *ExcInfo) Clear() {
 	*info = ExcInfo{}
 }

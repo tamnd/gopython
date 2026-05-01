@@ -19,6 +19,18 @@ func TestXIDataLifecycle(t *testing.T) {
 	}
 }
 
+func TestNewObjectFromXIData(t *testing.T) {
+	x := NewXIData()
+	x.Init(4, "data", "obj", func(v any) (any, error) { return "made", nil })
+	got, err := NewObjectFromXIData(x)
+	if err != nil || got != "made" {
+		t.Fatalf("NewObjectFromXIData = (%v, %v)", got, err)
+	}
+	if _, err := NewObjectFromXIData(NewXIData()); err == nil {
+		t.Fatal("expected missing new object error")
+	}
+}
+
 func TestXIDataErrors(t *testing.T) {
 	x := NewXIData()
 	x.InterpID = -1

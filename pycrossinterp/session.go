@@ -274,6 +274,22 @@ func GetMainNamespace(session *Session, hooks SessionHooks, failure *Failure) (m
 	return session.MainNS, nil
 }
 
+func GetPreserved(result *SessionResult, name string) any {
+	if result == nil || result.Preserved == nil {
+		return nil
+	}
+	return result.Preserved[name]
+}
+
+func ClearResult(result *SessionResult) {
+	if result == nil {
+		return
+	}
+	result.Preserved = nil
+	result.ExcInfo = nil
+	result.ErrCode = ErrNoError
+}
+
 func popPreserved(session *Session, failure *Failure) (*SharedNamespace, map[string]any, error) {
 	if session.Preserved == nil {
 		return nil, nil, nil

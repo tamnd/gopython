@@ -31,7 +31,8 @@ func EnsureIsolatedMain(main *SyncModule, hooks MainModuleHooks) error {
 		return nil
 	}
 	if main.Filename == "" {
-		return fmt.Errorf("not implemented")
+		main.Cached.Failed = fmt.Errorf("not implemented")
+		return main.Cached.Failed
 	}
 	if hooks.GetMainModule == nil || hooks.LoadFromPath == nil {
 		return fmt.Errorf("missing main module hooks")

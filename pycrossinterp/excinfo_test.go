@@ -1,6 +1,9 @@
 package pycrossinterp
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestExcInfoFormat(t *testing.T) {
 	info := ExcInfo{
@@ -49,5 +52,26 @@ func TestExcInfoClearAndIsSet(t *testing.T) {
 	info.Clear()
 	if info.IsSet() {
 		t.Fatal("info should be cleared")
+	}
+}
+
+func TestExcInfoPublicWrappers(t *testing.T) {
+	info, err := NewExcInfo(errors.New("boom"))
+	if err != nil {
+		t.Fatalf("NewExcInfo returned error: %v", err)
+	}
+	if FormatExcInfo(info) != "Exception: boom" {
+		t.Fatalf("FormatExcInfo = %q", FormatExcInfo(info))
+	}
+	obj := ExcInfoAsObject(info)
+	if obj.Msg != "boom" {
+		t.Fatalf("ExcInfoAsObject = %#v", obj)
+	}
+	FreeExcInfo(info)
+	if info.IsSet() {
+		t.Fatal("info should be cleared")
+	}
+	if _, err := NewExcInfo(nil); err == nil {
+		t.Fatal("expected missing exc error")
 	}
 }
