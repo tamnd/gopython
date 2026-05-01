@@ -197,6 +197,52 @@ func TestOpenFileAndValidFD(t *testing.T) {
 	}
 }
 
+func TestOpenFDNoRaiseAndWFopen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fd-opened.txt")
+	fd, err := OpenFDNoRaise(path, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0o600)
+	if err != nil {
+		t.Fatalf("OpenFDNoRaise returned error: %v", err)
+	}
+	if !IsValidFD(fd) {
+		t.Fatal("OpenFDNoRaise should return a valid descriptor")
+	}
+	file := os.NewFile(uintptr(fd), path)
+	if file == nil {
+		t.Fatal("os.NewFile returned nil for OpenFDNoRaise descriptor")
+	}
+	if _, err := io.WriteString(file, "hello"); err != nil {
+		t.Fatalf("WriteString returned error: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("Close returned error: %v", err)
+	}
+
+	path2 := filepath.Join(t.TempDir(), "wfopen.txt")
+	wfile, err := WFopen([]rune(path2), "w+")
+	if err != nil {
+		t.Fatalf("WFopen returned error: %v", err)
+	}
+	if _, err := io.WriteString(wfile, "content"); err != nil {
+		t.Fatalf("WriteString to WFopen file returned error: %v", err)
+	}
+	if _, err := wfile.Seek(0, 0); err != nil {
+		t.Fatalf("Seek returned error: %v", err)
+	}
+	data, err := io.ReadAll(wfile)
+	if err != nil {
+		t.Fatalf("ReadAll returned error: %v", err)
+	}
+	if string(data) != "content" {
+		t.Fatalf("WFopen content = %q, want %q", string(data), "content")
+	}
+	if err := Fclose(wfile); err != nil {
+		t.Fatalf("Fclose returned error: %v", err)
+	}
+	if _, err := WFopen([]rune(path2), "rx"); err == nil {
+		t.Fatal("WFopen should reject exclusive read mode")
+	}
+}
+
 func TestWStatAndWAbsPath(t *testing.T) {
 	file, err := os.CreateTemp(t.TempDir(), "wpath")
 	if err != nil {

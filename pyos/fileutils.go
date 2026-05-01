@@ -162,19 +162,56 @@ func IsValidFD(fd int) bool {
 }
 
 func OpenFile(path string, flag int, perm fs.FileMode) (*os.File, error) {
-	file, err := os.OpenFile(path, flag, perm)
+	fd, err := OpenFD(path, flag, perm)
 	if err != nil {
 		return nil, err
 	}
-	if err := SetInheritable(int(file.Fd()), false); err != nil {
-		file.Close()
-		return nil, err
+	file := os.NewFile(uintptr(fd), path)
+	if file == nil {
+		syscall.Close(fd)
+		return nil, errors.New("failed to wrap file descriptor")
 	}
 	return file, nil
 }
 
 func OpenFileNoRaise(path string, flag int, perm fs.FileMode) (*os.File, error) {
-	return OpenFile(path, flag, perm)
+	fd, err := OpenFDNoRaise(path, flag, perm)
+	if err != nil {
+		return nil, err
+	}
+	file := os.NewFile(uintptr(fd), path)
+	if file == nil {
+		syscall.Close(fd)
+		return nil, errors.New("failed to wrap file descriptor")
+	}
+	return file, nil
+}
+
+func OpenFD(path string, flag int, perm fs.FileMode) (int, error) {
+	return openFD(path, flag, perm, true)
+}
+
+func OpenFDNoRaise(path string, flag int, perm fs.FileMode) (int, error) {
+	return openFD(path, flag, perm, false)
+}
+
+func WFopen(path []rune, mode string) (*os.File, error) {
+	nativePath, err := runesToNativePath(path)
+	if err != nil {
+		return nil, err
+	}
+	flags, perm, err := fopenMode(mode)
+	if err != nil {
+		return nil, err
+	}
+	return OpenFileNoRaise(nativePath, flags, perm)
+}
+
+func Fclose(file *os.File) error {
+	if file == nil {
+		return nil
+	}
+	return file.Close()
 }
 
 func WAbsPath(path []rune) ([]rune, error) {
@@ -381,4 +418,59 @@ func runesToNativePath(path []rune) (string, error) {
 		return "", err
 	}
 	return string(encoded), nil
+}
+
+func fopenMode(mode string) (int, fs.FileMode, error) {
+	if mode == "" {
+		return 0, 0, errors.New("empty mode")
+	}
+	readWrite := false
+	exclusive := false
+	for _, ch := range mode[1:] {
+		switch ch {
+		case '+':
+			readWrite = true
+		case 'x':
+			exclusive = true
+		case 'b', 't':
+		default:
+			return 0, 0, errors.New("invalid fopen mode")
+		}
+	}
+
+	flags := 0
+	switch mode[0] {
+	case 'r':
+		if readWrite {
+			flags = os.O_RDWR
+		} else {
+			flags = os.O_RDONLY
+		}
+		if exclusive {
+			return 0, 0, errors.New("exclusive flag requires write mode")
+		}
+	case 'w':
+		if readWrite {
+			flags = os.O_RDWR
+		} else {
+			flags = os.O_WRONLY
+		}
+		flags |= os.O_CREATE | os.O_TRUNC
+		if exclusive {
+			flags |= os.O_EXCL
+		}
+	case 'a':
+		if readWrite {
+			flags = os.O_RDWR
+		} else {
+			flags = os.O_WRONLY
+		}
+		flags |= os.O_CREATE | os.O_APPEND
+		if exclusive {
+			flags |= os.O_EXCL
+		}
+	default:
+		return 0, 0, errors.New("invalid fopen mode")
+	}
+	return flags, 0o666, nil
 }
