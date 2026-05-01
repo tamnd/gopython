@@ -1,10 +1,13 @@
 package pyos
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync/atomic"
+	"syscall"
 	"testing"
 
 	"golang.org/x/term"
@@ -240,6 +243,86 @@ func TestOpenFDNoRaiseAndWFopen(t *testing.T) {
 	}
 	if _, err := WFopen([]rune(path2), "rx"); err == nil {
 		t.Fatal("WFopen should reject exclusive read mode")
+	}
+}
+
+func TestReadFDAndWriteFD(t *testing.T) {
+	var pipeFDs [2]int
+	if err := syscall.Pipe(pipeFDs[:]); err != nil {
+		t.Fatalf("Pipe returned error: %v", err)
+	}
+	defer syscall.Close(pipeFDs[0])
+	defer syscall.Close(pipeFDs[1])
+
+	if n, err := WriteFD(pipeFDs[1], []byte("hello")); err != nil || n != 5 {
+		t.Fatalf("WriteFD = (%d, %v), want (5, nil)", n, err)
+	}
+
+	buf := make([]byte, 8)
+	n, err := ReadFD(pipeFDs[0], buf)
+	if err != nil {
+		t.Fatalf("ReadFD returned error: %v", err)
+	}
+	if got := string(buf[:n]); got != "hello" {
+		t.Fatalf("ReadFD content = %q, want %q", got, "hello")
+	}
+}
+
+func TestReadFDAndWriteFDRetry(t *testing.T) {
+	prevRead := readFDHook
+	prevWrite := writeFDHook
+	var readCalls atomic.Int32
+	var writeCalls atomic.Int32
+	readFDHook = func(fd int, p []byte) (int, error) {
+		if readCalls.Add(1) == 1 {
+			return -1, syscall.EINTR
+		}
+		copy(p, []byte("ok"))
+		return 2, nil
+	}
+	writeFDHook = func(fd int, p []byte) (int, error) {
+		if writeCalls.Add(1) == 1 {
+			return -1, syscall.EINTR
+		}
+		return len(p), nil
+	}
+	t.Cleanup(func() {
+		readFDHook = prevRead
+		writeFDHook = prevWrite
+	})
+
+	buf := make([]byte, 4)
+	n, err := ReadFD(0, buf)
+	if err != nil || n != 2 || string(buf[:2]) != "ok" {
+		t.Fatalf("ReadFD retry = (%d, %v, %q), want (2, nil, %q)", n, err, string(buf[:2]), "ok")
+	}
+	if _, err := WriteFD(1, []byte("abc")); err != nil {
+		t.Fatalf("WriteFD retry returned error: %v", err)
+	}
+	if got := readCalls.Load(); got != 2 {
+		t.Fatalf("read retry calls = %d, want 2", got)
+	}
+	if got := writeCalls.Load(); got != 2 {
+		t.Fatalf("write retry calls = %d, want 2", got)
+	}
+}
+
+func TestWriteFDNoRaiseDoesNotRetry(t *testing.T) {
+	prevWrite := writeFDHook
+	var writeCalls atomic.Int32
+	writeFDHook = func(fd int, p []byte) (int, error) {
+		writeCalls.Add(1)
+		return -1, syscall.EINTR
+	}
+	t.Cleanup(func() {
+		writeFDHook = prevWrite
+	})
+
+	if _, err := WriteFDNoRaise(1, []byte("abc")); !errors.Is(err, syscall.EINTR) {
+		t.Fatalf("WriteFDNoRaise error = %v, want EINTR", err)
+	}
+	if got := writeCalls.Load(); got != 1 {
+		t.Fatalf("write no-raise calls = %d, want 1", got)
 	}
 }
 
