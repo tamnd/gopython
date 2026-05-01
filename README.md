@@ -22,9 +22,9 @@ The source inventory tracks all 118 top-level files from:
 $HOME/github/python/cpython/Python
 ```
 
-Every later migration gets its own pull request, spec, tests, and source
-mapping. A migration is not complete until the behavior can be traced back to
-CPython 3.14 source.
+Every later migration gets its own pull request, tests, and source mapping. A
+migration is not complete until the behavior can be traced back to CPython
+3.14 source.
 
 ## Rules
 
