@@ -1,6 +1,9 @@
 package pyruntime
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 func AnyFileObject(filename string, interactive bool, runInteractive func(string) error, runSimple func(string) error) error {
 	if filename == "" {
@@ -50,3 +53,65 @@ func InteractiveLoop(defaultPS1, defaultPS2 string, prompts map[string]string, r
 }
 
 const EOF = 11
+
+func SimpleString(command string, name string, runString func(string, string) error) error {
+	if runString == nil {
+		return nil
+	}
+	return runString(command, name)
+}
+
+func SimpleFile(filename string, closeIt bool, maybePyc bool, runPyc func(string) error, runSource func(string) error) error {
+	if filename == "" {
+		filename = "???"
+	}
+	if maybePyc {
+		if runPyc == nil {
+			return nil
+		}
+		return runPyc(filename)
+	}
+	if runSource == nil {
+		return nil
+	}
+	return runSource(filename)
+}
+
+func HandleSystemExit(exceptionType string, inspect bool, code any) (bool, int, string) {
+	if exceptionType == "KeyboardInterrupt" {
+		return false, 0, ""
+	}
+	if inspect {
+		return false, 0, ""
+	}
+	if exceptionType != "SystemExit" {
+		return false, 0, ""
+	}
+	switch value := code.(type) {
+	case int:
+		return true, value, ""
+	case int64:
+		return true, int(value), ""
+	case nil:
+		return true, 0, ""
+	case string:
+		return true, 1, value
+	default:
+		return true, 1, fmt.Sprint(value)
+	}
+}
+
+func ExceptionMessage(moduleName, qualName, message string) string {
+	var prefix string
+	if moduleName != "" && moduleName != "builtins" && moduleName != "__main__" {
+		prefix = moduleName + "."
+	}
+	if message == "" {
+		return prefix + qualName
+	}
+	return prefix + qualName + ": " + message
+}
+
+func RenderChainedExceptions(messages []string) string {
+	return strings.Join(messages, "\n\n")
+}
