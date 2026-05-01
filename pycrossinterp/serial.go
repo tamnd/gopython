@@ -138,6 +138,14 @@ func ScriptToXIData(obj any, pure bool, xid *XIData) error {
 	return nil
 }
 
+func CodeToScriptXIData(obj any, xid *XIData) error {
+	return ScriptToXIData(obj, false, xid)
+}
+
+func CodeToPureScriptXIData(obj any, xid *XIData) error {
+	return ScriptToXIData(obj, true, xid)
+}
+
 func stringsContainsAny(text string, needles []string) bool {
 	for _, needle := range needles {
 		if strings.Contains(text, needle) {

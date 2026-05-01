@@ -92,6 +92,16 @@ func TestGetMainNamespaceAndFailureHelpers(t *testing.T) {
 	if failure.Code != ErrNoError || failure.Msg != "" {
 		t.Fatalf("failure after free = %#v", failure)
 	}
+
+	if err := Preserve(session, "y", 2, nil); err != nil {
+		t.Fatalf("Preserve returned error: %v", err)
+	}
+	if got, ok := session.GetPreserved("y"); !ok || got != 2 {
+		t.Fatalf("preserved = (%v, %t)", got, ok)
+	}
+	if err := Preserve(NewSession(), "z", 3, nil); err == nil {
+		t.Fatal("expected inactive preserve failure")
+	}
 }
 
 func TestSessionEnterFailurePropagates(t *testing.T) {

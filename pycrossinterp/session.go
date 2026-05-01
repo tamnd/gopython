@@ -83,6 +83,18 @@ func (session *Session) Preserve(name string, value any) {
 	session.Preserved[name] = value
 }
 
+func Preserve(session *Session, name string, value any, failure *Failure) error {
+	if !sessionActive(session) {
+		return fmt.Errorf("session not active")
+	}
+	if session.Preserved == nil {
+		session.Preserved = map[string]any{}
+	}
+	session.Preserved[name] = value
+	_ = failure
+	return nil
+}
+
 func (session *Session) GetPreserved(name string) (any, bool) {
 	if session.Preserved == nil {
 		return nil, false

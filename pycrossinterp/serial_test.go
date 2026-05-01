@@ -93,6 +93,15 @@ func TestScriptToXIData(t *testing.T) {
 	if err := ScriptToXIData("global x\nprint(x)", true, NewXIData()); err == nil {
 		t.Fatal("expected invalid pure script error")
 	}
+
+	y := NewXIData()
+	if err := CodeToScriptXIData("print('y')", y); err != nil {
+		t.Fatalf("CodeToScriptXIData returned error: %v", err)
+	}
+	z := NewXIData()
+	if err := CodeToPureScriptXIData("print('z')", z); err != nil {
+		t.Fatalf("CodeToPureScriptXIData returned error: %v", err)
+	}
 }
 
 func TestScriptCodeAndFunctionValidation(t *testing.T) {

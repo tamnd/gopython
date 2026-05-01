@@ -142,6 +142,14 @@ func TestObjectXIDataLookupAndFallback(t *testing.T) {
 		t.Fatalf("x = %#v", x)
 	}
 
+	nf := NewXIData()
+	if err := ObjectGetXIDataNoFallback(&lookup, 10, "abc", nf); err != nil {
+		t.Fatalf("ObjectGetXIDataNoFallback returned error: %v", err)
+	}
+	if nf.InterpID != 10 || nf.Data != "shared:abc" {
+		t.Fatalf("nf = %#v", nf)
+	}
+
 	y := NewXIData()
 	if err := ObjectGetXIData(nil, 8, map[string]any{"a": 1}, XIDataFullFallback, y); err != nil {
 		t.Fatalf("ObjectGetXIData fallback returned error: %v", err)

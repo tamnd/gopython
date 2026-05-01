@@ -147,6 +147,10 @@ func ObjectCheckXIData(lookup *LookupState, obj any) error {
 	return nil
 }
 
+func ObjectGetXIDataNoFallback(lookup *LookupState, interpID int64, obj any, xidata *XIData) error {
+	return ObjectGetXIData(lookup, interpID, obj, XIDataOnly, xidata)
+}
+
 func ObjectGetXIData(lookup *LookupState, interpID int64, obj any, fallback XIDataFallback, xidata *XIData) error {
 	if xidata == nil {
 		return fmt.Errorf("missing xidata")
