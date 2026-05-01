@@ -363,7 +363,9 @@ func TestThreadIdAndStackSize(t *testing.T) {
 }
 
 func TestNativeThreadIDNonZeroOnSupportedPlatforms(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" && runtime.GOOS != "windows" {
+	switch runtime.GOOS {
+	case "darwin", "dragonfly", "freebsd", "linux", "netbsd", "openbsd", "windows":
+	default:
 		t.Skip("native thread id is only wired directly on this platform set")
 	}
 	if got := currentNativeThreadID(); got == 0 {
