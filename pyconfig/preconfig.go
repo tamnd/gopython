@@ -13,9 +13,9 @@ import (
 type ConfigInit int
 
 const (
-	ConfigInitCompat ConfigInit = iota
-	ConfigInitPython
-	ConfigInitIsolated
+	ConfigInitCompat   ConfigInit = 1
+	ConfigInitPython   ConfigInit = 2
+	ConfigInitIsolated ConfigInit = 3
 )
 
 const MemoryAllocatorNotSet = -1
