@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -370,5 +371,46 @@ func TestNativeThreadIDNonZeroOnSupportedPlatforms(t *testing.T) {
 	}
 	if got := currentNativeThreadID(); got == 0 {
 		t.Fatal("native thread id should be non-zero on supported platforms")
+	}
+}
+
+func TestExitThreadWithoutInitExitsProcess(t *testing.T) {
+	if os.Getenv("GOPYTHON_EXITTHREAD_HELPER") == "1" {
+		threadInitialized = atomic.Bool{}
+		ExitThread()
+		t.Fatal("ExitThread should not return in helper")
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestExitThreadWithoutInitExitsProcess")
+	cmd.Env = append(os.Environ(), "GOPYTHON_EXITTHREAD_HELPER=1")
+	err := cmd.Run()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			t.Fatalf("ExitThread helper exited with code %d, want 0", exitErr.ExitCode())
+		}
+		t.Fatalf("ExitThread helper returned error: %v", err)
+	}
+}
+
+func TestExitThreadStopsWorker(t *testing.T) {
+	threadInitialized = atomic.Bool{}
+	nextThreadID = atomic.Uint64{}
+	threadIDs = sync.Map{}
+
+	done := make(chan struct{}, 1)
+	_, handle, err := StartJoinableThread(func(any) {
+		ExitThread()
+		done <- struct{}{}
+	}, nil)
+	if err != nil {
+		t.Fatalf("StartJoinableThread returned error: %v", err)
+	}
+	if err := handle.Join(); err != nil {
+		t.Fatalf("Join returned error: %v", err)
+	}
+	select {
+	case <-done:
+		t.Fatal("worker continued after ExitThread")
+	default:
 	}
 }

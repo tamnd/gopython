@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -286,7 +287,7 @@ func GetThreadNativeID() uint64 {
 
 func ExitThread() {
 	if !threadInitialized.Load() {
-		panic("exit 0")
+		os.Exit(0)
 	}
 	runtime.Goexit()
 }
