@@ -3,6 +3,7 @@ package pythread
 import (
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -344,13 +345,19 @@ func TestThreadIdAndStackSize(t *testing.T) {
 	if SetStackSize(0) != 0 {
 		t.Fatal("SetStackSize(0) should reset to default")
 	}
-	if SetStackSize(threadMinStackSize) != 0 {
+	minimum := uint64(threadMinStackSize)
+	if runtime.GOOS != "windows" {
+		if pageSize := os.Getpagesize(); uint64(pageSize) > minimum {
+			minimum = uint64(pageSize)
+		}
+	}
+	if SetStackSize(minimum) != 0 {
 		t.Fatal("SetStackSize(min) should succeed")
 	}
-	if GetStackSize() != threadMinStackSize {
-		t.Fatalf("stack size = %#x, want %#x", GetStackSize(), threadMinStackSize)
+	if GetStackSize() != minimum {
+		t.Fatalf("stack size = %#x, want %#x", GetStackSize(), minimum)
 	}
-	if SetStackSize(threadMinStackSize-1) != -1 {
+	if SetStackSize(minimum-1) != -1 {
 		t.Fatal("SetStackSize(below min) should fail")
 	}
 }

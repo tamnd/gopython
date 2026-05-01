@@ -2,6 +2,8 @@
 
 package pythread
 
+import "os"
+
 const threadMinStackSize = 0x8000
 
 func setStackSizePlatform(size uint64) int {
@@ -9,9 +11,15 @@ func setStackSizePlatform(size uint64) int {
 		threadStackSize.Store(0)
 		return 0
 	}
-	if size >= threadMinStackSize {
-		threadStackSize.Store(size)
-		return 0
+
+	minimum := uint64(threadMinStackSize)
+	if pageSize := os.Getpagesize(); pageSize > 0 && uint64(pageSize) > minimum {
+		minimum = uint64(pageSize)
 	}
-	return -1
+	if size < minimum {
+		return -1
+	}
+
+	threadStackSize.Store(size)
+	return 0
 }
