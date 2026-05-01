@@ -35,6 +35,7 @@ type RuntimeState struct {
 	mainThread      uint64
 	nextInterpreter int64
 	interpreters    []*InterpreterState
+	main            *ThreadState
 	current         *ThreadState
 }
 
@@ -98,6 +99,9 @@ func UnbindThread(ts *ThreadState) {
 func BindGILState(runtime *RuntimeState, ts *ThreadState) {
 	runtime.mu.Lock()
 	defer runtime.mu.Unlock()
+	if runtime.main == nil {
+		runtime.main = ts
+	}
 	if runtime.current != nil {
 		runtime.current.Status.BoundGILState = false
 	}
@@ -118,6 +122,53 @@ func CurrentThreadState(runtime *RuntimeState) *ThreadState {
 	runtime.mu.Lock()
 	defer runtime.mu.Unlock()
 	return runtime.current
+}
+
+func MainThreadState(runtime *RuntimeState) *ThreadState {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	return runtime.main
+}
+
+func SetMainThreadState(runtime *RuntimeState, ts *ThreadState) {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	runtime.main = ts
+}
+
+func RemoveExcept(runtime *RuntimeState, keep *ThreadState) []*ThreadState {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	var removed []*ThreadState
+	if keep == nil {
+		removed = append(removed, runtime.current)
+		runtime.current = nil
+		runtime.main = nil
+		return removed
+	}
+	if runtime.current != nil && runtime.current != keep {
+		removed = append(removed, runtime.current)
+	}
+	runtime.current = keep
+	return removed
+}
+
+func DeleteInterpreter(runtime *RuntimeState, interp *InterpreterState) {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	out := runtime.interpreters[:0]
+	for _, current := range runtime.interpreters {
+		if current != interp {
+			out = append(out, current)
+		}
+	}
+	runtime.interpreters = out
+	if runtime.main != nil && runtime.main.Interp == interp {
+		runtime.main = nil
+	}
+	if runtime.current != nil && runtime.current.Interp == interp {
+		runtime.current = nil
+	}
 }
 
 func SetRunningMain(interp *InterpreterState) error {

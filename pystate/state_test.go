@@ -30,7 +30,7 @@ func TestThreadBindingAndCurrent(t *testing.T) {
 		t.Fatalf("thread state = %#v", ts)
 	}
 	BindGILState(runtime, ts)
-	if CurrentThreadState(runtime) != ts || !ts.Status.BoundGILState {
+	if CurrentThreadState(runtime) != ts || MainThreadState(runtime) != ts || !ts.Status.BoundGILState {
 		t.Fatalf("current thread binding failed: %#v", ts)
 	}
 	UnbindGILState(runtime, ts)
@@ -40,6 +40,30 @@ func TestThreadBindingAndCurrent(t *testing.T) {
 	UnbindThread(ts)
 	if !ts.Status.Unbound {
 		t.Fatalf("thread should be marked unbound: %#v", ts)
+	}
+}
+
+func TestRuntimeRemovalHelpers(t *testing.T) {
+	runtime := NewRuntimeState()
+	interp1 := runtime.NewInterpreter()
+	interp2 := runtime.NewInterpreter()
+	ts1 := NewThreadState(interp1)
+	ts2 := NewThreadState(interp2)
+	BindGILState(runtime, ts1)
+	SetMainThreadState(runtime, ts1)
+	BindGILState(runtime, ts2)
+
+	removed := RemoveExcept(runtime, ts1)
+	if len(removed) != 1 || removed[0] != ts2 {
+		t.Fatalf("removed = %#v", removed)
+	}
+	if CurrentThreadState(runtime) != ts1 {
+		t.Fatalf("current = %#v", CurrentThreadState(runtime))
+	}
+
+	DeleteInterpreter(runtime, interp2)
+	if len(runtime.Interpreters()) != 1 {
+		t.Fatalf("interpreters = %#v", runtime.Interpreters())
 	}
 }
 
