@@ -74,6 +74,9 @@ func TestInterpreterAPIWrappers(t *testing.T) {
 	if result == nil || result.Interp == nil || result.Thread == nil || result.SaveThread != mainThread {
 		t.Fatalf("result = %#v", result)
 	}
+	if result.Interp.Whence != pyruntime.InterpreterWhenceXI {
+		t.Fatalf("interp whence = %d", result.Interp.Whence)
+	}
 
 	var save *pystate.ThreadState = mainThread
 	if err := EndInterpreter(result.Interp, result.Thread, &save, pyruntime.FinalizeHooks{}); err != nil {
@@ -101,6 +104,35 @@ func TestInterpreterAPIErrorWrap(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected wrapped creation error")
+	}
+}
+
+func TestInterpreterStateOnlyWrapper(t *testing.T) {
+	runtime := pystate.NewRuntimeState()
+	runtime.Init(1)
+	mainInterp := runtime.NewInterpreter()
+	mainThread := pystate.NewThreadState(mainInterp)
+	pystate.BindThread(mainThread, 1, 1)
+	pystate.BindGILState(runtime, mainThread)
+	pystate.SetMainThreadState(runtime, mainThread)
+
+	interp, save, err := NewInterpreterStateOnly(runtime, pyconfig.InterpreterConfig{
+		UseMainObmalloc:            true,
+		AllowFork:                  true,
+		AllowExec:                  true,
+		AllowThreads:               true,
+		AllowDaemonThreads:         true,
+		CheckMultiInterpExtensions: true,
+		GIL:                        pyconfig.OwnGIL,
+	}, nil, pyruntime.NewInterpreterHooks{})
+	if err != nil {
+		t.Fatalf("NewInterpreterStateOnly error: %v", err)
+	}
+	if interp == nil || save != mainThread {
+		t.Fatalf("interp=%#v save=%#v", interp, save)
+	}
+	if pystate.CurrentThreadState(runtime) != mainThread {
+		t.Fatalf("current = %#v", pystate.CurrentThreadState(runtime))
 	}
 }
 

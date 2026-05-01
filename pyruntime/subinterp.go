@@ -11,6 +11,7 @@ const (
 	InterpreterWhenceCAPI = 1 + iota
 	InterpreterWhenceLegacyCAPI
 	InterpreterWhenceFinalize
+	InterpreterWhenceXI
 )
 
 type NewInterpreterHooks struct {

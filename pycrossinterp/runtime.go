@@ -109,7 +109,7 @@ type InterpreterAPIResult struct {
 
 func NewInterpreter(runtime *pystate.RuntimeState, config pyconfig.InterpreterConfig, whence *int, hooks pyruntime.NewInterpreterHooks) (*InterpreterAPIResult, error) {
 	save := pystate.CurrentThreadState(runtime)
-	useWhence := pyruntime.InterpreterWhenceCAPI
+	useWhence := pyruntime.InterpreterWhenceXI
 	if whence != nil {
 		useWhence = *whence
 	}
@@ -122,6 +122,25 @@ func NewInterpreter(runtime *pystate.RuntimeState, config pyconfig.InterpreterCo
 		Thread:     thread,
 		SaveThread: save,
 	}, nil
+}
+
+func NewInterpreterStateOnly(runtime *pystate.RuntimeState, config pyconfig.InterpreterConfig, whence *int, hooks pyruntime.NewInterpreterHooks) (*pystate.InterpreterState, *pystate.ThreadState, error) {
+	result, err := NewInterpreter(runtime, config, whence, hooks)
+	if err != nil {
+		return nil, nil, err
+	}
+	if result == nil || result.Interp == nil {
+		return nil, result.SaveThread, nil
+	}
+	if result.Thread != nil {
+		if result.SaveThread != nil {
+			pystate.BindGILState(runtime, result.SaveThread)
+		}
+		result.Thread.Status.Cleared = true
+		result.Thread.Status.Finalized = true
+		result.Thread = nil
+	}
+	return result.Interp, result.SaveThread, nil
 }
 
 func EndInterpreter(interp *pystate.InterpreterState, thread *pystate.ThreadState, save **pystate.ThreadState, hooks pyruntime.FinalizeHooks) error {
