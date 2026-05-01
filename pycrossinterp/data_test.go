@@ -45,6 +45,36 @@ func TestXIDataAllocHelpers(t *testing.T) {
 	}
 }
 
+func TestXIDataReleaseHelpers(t *testing.T) {
+	x := NewXIData()
+	cleared := false
+	x.Init(4, "data", "obj", func(v any) (any, error) { return v, nil })
+	x.Free = func(any) { cleared = true }
+	if got := ReleaseXIData(x, 4, nil, nil); got != 0 || !cleared {
+		t.Fatalf("ReleaseXIData = %d cleared=%t", got, cleared)
+	}
+
+	y := NewXIData()
+	y.Init(8, "data", "obj", func(v any) (any, error) { return v, nil })
+	scheduled := int64(0)
+	if got := ReleaseAndRawFreeXIData(y, 3, func(id int64) bool { return id == 8 }, func(id int64, fn func(any) int, arg any) {
+		scheduled = id
+		fn(arg)
+	}); got != 0 || scheduled != 8 {
+		t.Fatalf("ReleaseAndRawFreeXIData = %d scheduled=%d", got, scheduled)
+	}
+}
+
+func TestCopyStringObjectRaw(t *testing.T) {
+	text, size, err := CopyStringObjectRaw("abc")
+	if err != nil || text != "abc" || size != 3 {
+		t.Fatalf("CopyStringObjectRaw = (%q, %d, %v)", text, size, err)
+	}
+	if _, _, err := CopyStringObjectRaw("a\x00b"); err == nil {
+		t.Fatal("expected embedded NUL error")
+	}
+}
+
 func TestCallInInterpreter(t *testing.T) {
 	called := 0
 	got := CallInInterpreter(1, 1, func(any) int {

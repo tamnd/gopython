@@ -42,7 +42,7 @@ func TestSessionEnterAndExit(t *testing.T) {
 	}, result); err != nil {
 		t.Fatalf("Exit error: %v", err)
 	}
-	if current != 1 || cleared != 2 || result.Preserved["x"] != 1 {
+	if current != 1 || cleared != 2 || result.Preserved["x"] != float64(1) {
 		t.Fatalf("current=%d cleared=%d result=%#v", current, cleared, result)
 	}
 }
@@ -63,6 +63,34 @@ func TestSessionEnterApplyNamespace(t *testing.T) {
 	got := mainNS["a"].(map[string]any)
 	if got["x"] != float64(1) {
 		t.Fatalf("mainNS = %#v", mainNS)
+	}
+}
+
+func TestGetMainNamespaceAndFailureHelpers(t *testing.T) {
+	session := &Session{
+		Status:       SessionActive,
+		InitInterpID: 3,
+	}
+	ns, err := GetMainNamespace(session, SessionHooks{
+		GetMainNamespace: func(id int64) (map[string]any, error) {
+			return map[string]any{"x": 1}, nil
+		},
+	}, nil)
+	if err != nil || ns["x"] != 1 {
+		t.Fatalf("GetMainNamespace = (%#v, %v)", ns, err)
+	}
+
+	failure := NewFailure()
+	InitFailureUTF8(failure, ErrPreserveFailure, "bad")
+	if GetFailureCode(failure) != ErrPreserveFailure || failure.Msg != "bad" {
+		t.Fatalf("failure = %#v", failure)
+	}
+	if err := InitFailure(failure, ErrApplyNSFailure, 123); err != nil || failure.Msg != "123" {
+		t.Fatalf("failure = %#v err=%v", failure, err)
+	}
+	FreeFailure(failure)
+	if failure.Code != ErrNoError || failure.Msg != "" {
+		t.Fatalf("failure after free = %#v", failure)
 	}
 }
 
@@ -100,6 +128,29 @@ func TestSessionExitPropagatesErrors(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 	if result.ErrCode != ErrNotShareable {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestSessionPreserveAcrossSwitch(t *testing.T) {
+	session := &Session{
+		Status:       SessionActive,
+		Switched:     true,
+		InitInterpID: 5,
+		PrevInterpID: 1,
+		Running:      true,
+	}
+	session.Preserve("x", map[string]any{"a": 1})
+	result := &SessionResult{}
+	err := Exit(session, nil, nil, SessionHooks{
+		ClearRunningMain: func(int64) {},
+		SwitchBack:       func(int64) error { return nil },
+	}, result)
+	if err != nil {
+		t.Fatalf("Exit error: %v", err)
+	}
+	got := result.Preserved["x"].(map[string]any)
+	if got["a"] != float64(1) {
 		t.Fatalf("result = %#v", result)
 	}
 }

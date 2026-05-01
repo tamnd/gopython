@@ -24,6 +24,32 @@ func FreeXIData(interpID int64, x *XIData) error {
 	return nil
 }
 
+func ReleaseXIData(x *XIData, currentID int64, lookup func(int64) bool, schedule func(int64, func(any) int, any)) int {
+	if x == nil {
+		return 0
+	}
+	if (x.Data == nil || x.Free == nil) && x.Obj == nil {
+		x.Data = nil
+		return 0
+	}
+	if lookup != nil && !lookup(x.InterpID) {
+		_ = x.Clear(0)
+		return -1
+	}
+	if x.InterpID == currentID {
+		_ = x.Clear(0)
+		return 0
+	}
+	return CallInInterpreter(currentID, x.InterpID, func(any) int {
+		_ = x.Clear(0)
+		return 0
+	}, x, schedule)
+}
+
+func ReleaseAndRawFreeXIData(x *XIData, currentID int64, lookup func(int64) bool, schedule func(int64, func(any) int, any)) int {
+	return ReleaseXIData(x, currentID, lookup, schedule)
+}
+
 func (x *XIData) Init(interpID int64, shared any, obj any, newObject func(any) (any, error)) {
 	*x = XIData{
 		InterpID:  interpID,
@@ -145,4 +171,13 @@ func ObjectGetXIData(lookup *LookupState, interpID int64, obj any, fallback XIDa
 	default:
 		return fmt.Errorf("unsupported xidata fallback option")
 	}
+}
+
+func CopyStringObjectRaw(text string) (string, int, error) {
+	for _, ch := range text {
+		if ch == 0 {
+			return "", 0, fmt.Errorf("found embedded NULL character")
+		}
+	}
+	return text, len(text), nil
 }

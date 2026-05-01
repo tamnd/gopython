@@ -142,6 +142,43 @@ func PropagateNotShareableError(err error, override *Failure) {
 	}
 }
 
+func NewFailure() *Failure {
+	return &Failure{Code: ErrNoError}
+}
+
+func FreeFailure(failure *Failure) {
+	if failure == nil {
+		return
+	}
+	*failure = Failure{Code: ErrNoError}
+}
+
+func GetFailureCode(failure *Failure) ErrCode {
+	if failure == nil {
+		return ErrNoError
+	}
+	return failure.Code
+}
+
+func InitFailureUTF8(failure *Failure, code ErrCode, msg string) {
+	if failure == nil {
+		return
+	}
+	*failure = Failure{Code: code, Msg: msg}
+}
+
+func InitFailure(failure *Failure, code ErrCode, obj any) error {
+	if failure == nil {
+		return nil
+	}
+	*failure = Failure{Code: code}
+	if obj == nil {
+		return nil
+	}
+	failure.Msg = fmt.Sprint(obj)
+	return nil
+}
+
 func CaptureErrorState(interpID int64, raised error, override *Failure) ErrorState {
 	state := ErrorState{InterpID: interpID}
 	if override != nil && override.Code != ErrNoError && override.Code != ErrUncaughtException {
@@ -225,6 +262,68 @@ func ensureMainNS(session *Session, hooks SessionHooks, override *Failure) error
 	}
 	session.MainNS = ns
 	return nil
+}
+
+func GetMainNamespace(session *Session, hooks SessionHooks, failure *Failure) (map[string]any, error) {
+	if !sessionActive(session) {
+		return nil, fmt.Errorf("session not active")
+	}
+	if err := ensureMainNS(session, hooks, failure); err != nil {
+		return nil, err
+	}
+	return session.MainNS, nil
+}
+
+func popPreserved(session *Session, failure *Failure) (*SharedNamespace, map[string]any, error) {
+	if session.Preserved == nil {
+		return nil, nil, nil
+	}
+	if !session.Switched {
+		preserved := session.Preserved
+		session.Preserved = nil
+		return nil, preserved, nil
+	}
+	if len(session.Preserved) == 0 {
+		session.Preserved = nil
+		return nil, nil, nil
+	}
+	names := make([]string, 0, len(session.Preserved))
+	for name := range session.Preserved {
+		names = append(names, name)
+	}
+	shared, err := CreateSharedNamespace(names)
+	if err != nil {
+		if failure != nil {
+			failure.Code = ErrPreserveFailure
+		}
+		return nil, nil, err
+	}
+	if err := shared.Fill(session.Preserved, XIDataFullFallback); err != nil {
+		if failure != nil {
+			if _, ok := err.(*NotShareableError); ok {
+				failure.Code = ErrNotShareable
+				failure.Msg = err.Error()
+			} else {
+				failure.Code = ErrPreserveFailure
+			}
+		}
+		shared.Destroy(session.InitInterpID, nil, nil)
+		return nil, nil, err
+	}
+	session.Preserved = nil
+	return shared, nil, nil
+}
+
+func finishPreserved(shared *SharedNamespace) (map[string]any, error) {
+	if shared == nil {
+		return nil, nil
+	}
+	defer shared.Destroy(0, nil, nil)
+	ns := map[string]any{}
+	if err := shared.Apply(ns, nil); err != nil {
+		return nil, err
+	}
+	return ns, nil
 }
 
 func Enter(session *Session, interpID int64, nsupdates map[string]any, hooks SessionHooks, result *SessionResult) error {
@@ -311,9 +410,22 @@ func Exit(session *Session, raised error, override *Failure, hooks SessionHooks,
 	if raised != nil || (override != nil && override.Code != ErrNoError) {
 		state = CaptureErrorState(session.InitInterpID, raised, override)
 	}
-	preserved := session.Preserved
+	var localFailure Failure
+	sharedPreserved, directPreserved, popErr := popPreserved(session, &localFailure)
+	if popErr != nil && override == nil {
+		override = &localFailure
+	}
 	if err := exitSession(session, hooks); err != nil {
 		return err
+	}
+	preserved := directPreserved
+	if sharedPreserved != nil {
+		var err error
+		preserved, err = finishPreserved(sharedPreserved)
+		if err != nil && override == nil {
+			override = &Failure{Code: ErrPreserveFailure}
+			state = CaptureErrorState(session.InitInterpID, err, override)
+		}
 	}
 	if result != nil {
 		result.Preserved = preserved
@@ -327,6 +439,9 @@ func Exit(session *Session, raised error, override *Failure, hooks SessionHooks,
 	excinfo, err := ApplyError(state, "")
 	if result != nil {
 		result.ExcInfo = excinfo
+		if result.ErrCode == ErrNoError && state.Override != nil {
+			result.ErrCode = state.Override.Code
+		}
 	}
 	return err
 }
