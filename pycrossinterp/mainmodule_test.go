@@ -50,6 +50,45 @@ func TestSyncModuleFailureCaching(t *testing.T) {
 	}
 }
 
+func TestSyncModuleUsesInterpreterCache(t *testing.T) {
+	current := "current"
+	cache := map[string]any{}
+	main := &SyncModule{Filename: "main.py"}
+	loads := 0
+	hooks := MainModuleHooks{
+		GetMainModule: func() (any, error) { return current, nil },
+		LoadFromPath: func(filename string, modname string) (any, error) {
+			loads++
+			return filename + ":" + modname, nil
+		},
+		SetMainModule: func(module any) error {
+			current = module.(string)
+			return nil
+		},
+		GetCachedModule: func(name string) (any, error) {
+			return cache[name], nil
+		},
+		SetCachedModule: func(name string, module any) error {
+			cache[name] = module
+			return nil
+		},
+	}
+	if err := EnsureIsolatedMain(main, hooks); err != nil {
+		t.Fatalf("first EnsureIsolatedMain error: %v", err)
+	}
+	if loads != 1 {
+		t.Fatalf("loads = %d, want 1", loads)
+	}
+	main.Clear()
+	main.Filename = "main.py"
+	if err := EnsureIsolatedMain(main, hooks); err != nil {
+		t.Fatalf("second EnsureIsolatedMain error: %v", err)
+	}
+	if loads != 1 {
+		t.Fatalf("loads = %d, want cached reuse", loads)
+	}
+}
+
 func TestCheckMissingMainAttr(t *testing.T) {
 	if !CheckMissingMainAttr(errors.New("module '__main__' has no attribute 'x'")) {
 		t.Fatal("expected missing __main__ attr match")

@@ -14,10 +14,11 @@ type SyncModule struct {
 }
 
 type MainModuleHooks struct {
-	GetMainModule  func() (any, error)
-	LoadFromPath   func(filename string, modname string) (any, error)
-	SetMainModule  func(module any) error
-	CloneNamespace func(module any) (any, error)
+	GetMainModule   func() (any, error)
+	LoadFromPath    func(filename string, modname string) (any, error)
+	SetMainModule   func(module any) error
+	GetCachedModule func(name string) (any, error)
+	SetCachedModule func(name string, module any) error
 }
 
 func (m *SyncModule) Clear() {
@@ -39,10 +40,25 @@ func EnsureIsolatedMain(main *SyncModule, hooks MainModuleHooks) error {
 	if err != nil {
 		return err
 	}
-	loaded, err := hooks.LoadFromPath(main.Filename, "<fake __main__>")
-	if err != nil {
-		main.Cached.Failed = err
-		return err
+	var loaded any
+	if hooks.GetCachedModule != nil {
+		loaded, err = hooks.GetCachedModule("CACHED_MODULE_NS___main__")
+		if err != nil {
+			return err
+		}
+	}
+	if loaded == nil {
+		loaded, err = hooks.LoadFromPath(main.Filename, "<fake __main__>")
+		if err != nil {
+			main.Cached.Failed = err
+			return err
+		}
+		if hooks.SetCachedModule != nil {
+			if err := hooks.SetCachedModule("CACHED_MODULE_NS___main__", loaded); err != nil {
+				main.Cached.Failed = err
+				return err
+			}
+		}
 	}
 	main.Cached = SyncModuleResult{
 		Module: mod,
