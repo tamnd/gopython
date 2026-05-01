@@ -2,11 +2,29 @@
 
 package pyos
 
-import "golang.org/x/sys/windows"
+import (
+	"syscall"
+	"unsafe"
+
+	"golang.org/x/sys/windows"
+)
+
+var getHandleInformationProc = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetHandleInformation")
+
+func getHandleInformation(handle windows.Handle) (uint32, error) {
+	var flags uint32
+	r1, _, err := getHandleInformationProc.Call(uintptr(handle), uintptr(unsafe.Pointer(&flags)))
+	if r1 == 0 {
+		if err != nil && err != syscall.Errno(0) {
+			return 0, err
+		}
+		return 0, syscall.EINVAL
+	}
+	return flags, nil
+}
 
 func getInheritable(fd int) (bool, error) {
-	var flags uint32
-	err := windows.GetHandleInformation(windows.Handle(fd), &flags)
+	flags, err := getHandleInformation(windows.Handle(fd))
 	if err != nil {
 		return false, err
 	}
@@ -26,6 +44,6 @@ func setInheritable(fd int, inheritable bool) error {
 }
 
 func isValidFD(fd int) bool {
-	var flags uint32
-	return windows.GetHandleInformation(windows.Handle(fd), &flags) == nil
+	_, err := getHandleInformation(windows.Handle(fd))
+	return err == nil
 }

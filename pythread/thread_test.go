@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -16,6 +15,28 @@ type fakeTimedLocker struct {
 	results  []LockStatus
 	timeouts []int64
 	detachs  []bool
+}
+
+var threadTestStateMu sync.Mutex
+
+func lockThreadTestState(t *testing.T) {
+	threadTestStateMu.Lock()
+	t.Cleanup(threadTestStateMu.Unlock)
+}
+
+func resetThreadTestState() {
+	threadInitialized.Store(false)
+	threadStackSize.Store(0)
+	nextThreadID.Store(0)
+	threadInitHook = func() {}
+	threadIDs.Range(func(key, value any) bool {
+		threadIDs.Delete(key)
+		return true
+	})
+	tlsKeysMu.Lock()
+	tlsKeys = map[int]*tlsKey{}
+	nextTLSKey = 1
+	tlsKeysMu.Unlock()
 }
 
 func (l *fakeTimedLocker) AcquireTimed(timeoutMicroseconds int64, detach bool) LockStatus {
@@ -27,7 +48,8 @@ func (l *fakeTimedLocker) AcquireTimed(timeoutMicroseconds int64, detach bool) L
 }
 
 func TestInitThreadRunsOnlyOnce(t *testing.T) {
-	threadInitialized = atomic.Bool{}
+	lockThreadTestState(t)
+	resetThreadTestState()
 	calls := 0
 	threadInitHook = func() { calls++ }
 	t.Cleanup(func() { threadInitHook = func() {} })
@@ -153,9 +175,8 @@ func TestGetInfo(t *testing.T) {
 }
 
 func TestStartJoinableThreadAndJoin(t *testing.T) {
-	threadInitialized = atomic.Bool{}
-	nextThreadID = atomic.Uint64{}
-	threadIDs = sync.Map{}
+	lockThreadTestState(t)
+	resetThreadTestState()
 
 	done := make(chan any, 1)
 	ident, handle, err := StartJoinableThread(func(arg any) {
@@ -186,9 +207,8 @@ func TestStartJoinableThreadAndJoin(t *testing.T) {
 }
 
 func TestStartNewThreadDetachesHandle(t *testing.T) {
-	threadInitialized = atomic.Bool{}
-	nextThreadID = atomic.Uint64{}
-	threadIDs = sync.Map{}
+	lockThreadTestState(t)
+	resetThreadTestState()
 
 	done := make(chan struct{}, 1)
 	ident := StartNewThread(func(arg any) {
@@ -205,6 +225,8 @@ func TestStartNewThreadDetachesHandle(t *testing.T) {
 }
 
 func TestThreadHandleErrors(t *testing.T) {
+	lockThreadTestState(t)
+	resetThreadTestState()
 	_, handle, err := StartJoinableThread(func(any) {}, nil)
 	if err != nil {
 		t.Fatalf("StartJoinableThread returned error: %v", err)
@@ -221,9 +243,8 @@ func TestThreadHandleErrors(t *testing.T) {
 }
 
 func TestTLSLifecycle(t *testing.T) {
-	threadIDs = sync.Map{}
-	threadInitialized = atomic.Bool{}
-	nextThreadID = atomic.Uint64{}
+	lockThreadTestState(t)
+	resetThreadTestState()
 	key := CreateTLSKey()
 	if key <= 0 {
 		t.Fatalf("invalid TLS key: %d", key)
@@ -248,9 +269,8 @@ func TestTLSLifecycle(t *testing.T) {
 }
 
 func TestTLSIsolationAcrossThreads(t *testing.T) {
-	threadInitialized = atomic.Bool{}
-	nextThreadID = atomic.Uint64{}
-	threadIDs = sync.Map{}
+	lockThreadTestState(t)
+	resetThreadTestState()
 
 	key := CreateTLSKey()
 	if key <= 0 {
@@ -287,9 +307,8 @@ func TestTLSIsolationAcrossThreads(t *testing.T) {
 }
 
 func TestTSSIsolationAcrossThreads(t *testing.T) {
-	threadInitialized = atomic.Bool{}
-	nextThreadID = atomic.Uint64{}
-	threadIDs = sync.Map{}
+	lockThreadTestState(t)
+	resetThreadTestState()
 
 	key := AllocTSS()
 	if CreateTSS(key) != 0 {
@@ -325,6 +344,8 @@ func TestTSSIsolationAcrossThreads(t *testing.T) {
 }
 
 func TestThreadIdAndStackSize(t *testing.T) {
+	lockThreadTestState(t)
+	resetThreadTestState()
 	prev := currentThreadIdent
 	prevNative := currentNativeThreadID
 	currentThreadIdent = func() ThreadIdent { return 77 }
@@ -376,7 +397,7 @@ func TestNativeThreadIDNonZeroOnSupportedPlatforms(t *testing.T) {
 
 func TestExitThreadWithoutInitExitsProcess(t *testing.T) {
 	if os.Getenv("GOPYTHON_EXITTHREAD_HELPER") == "1" {
-		threadInitialized = atomic.Bool{}
+		threadInitialized.Store(false)
 		ExitThread()
 		t.Fatal("ExitThread should not return in helper")
 	}
@@ -393,9 +414,8 @@ func TestExitThreadWithoutInitExitsProcess(t *testing.T) {
 }
 
 func TestExitThreadStopsWorker(t *testing.T) {
-	threadInitialized = atomic.Bool{}
-	nextThreadID = atomic.Uint64{}
-	threadIDs = sync.Map{}
+	lockThreadTestState(t)
+	resetThreadTestState()
 
 	done := make(chan struct{}, 1)
 	_, handle, err := StartJoinableThread(func(any) {

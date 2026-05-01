@@ -271,19 +271,19 @@ func TestFopen(t *testing.T) {
 }
 
 func TestReadFDAndWriteFD(t *testing.T) {
-	var pipeFDs [2]int
-	if err := syscall.Pipe(pipeFDs[:]); err != nil {
-		t.Fatalf("Pipe returned error: %v", err)
+	readFD, writeFD, err := createPipe()
+	if err != nil {
+		t.Fatalf("createPipe returned error: %v", err)
 	}
-	defer syscall.Close(pipeFDs[0])
-	defer syscall.Close(pipeFDs[1])
+	defer closePipeFD(readFD)
+	defer closePipeFD(writeFD)
 
-	if n, err := WriteFD(pipeFDs[1], []byte("hello")); err != nil || n != 5 {
+	if n, err := WriteFD(writeFD, []byte("hello")); err != nil || n != 5 {
 		t.Fatalf("WriteFD = (%d, %v), want (5, nil)", n, err)
 	}
 
 	buf := make([]byte, 8)
-	n, err := ReadFD(pipeFDs[0], buf)
+	n, err := ReadFD(readFD, buf)
 	if err != nil {
 		t.Fatalf("ReadFD returned error: %v", err)
 	}

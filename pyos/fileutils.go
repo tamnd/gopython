@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"unicode/utf8"
 )
 
@@ -105,21 +104,6 @@ func WRealPath(path []rune) ([]rune, error) {
 	return DecodeLocale([]byte(resolved))
 }
 
-func FstatNoRaise(fd int) (StatInfo, error) {
-	var stat syscall.Stat_t
-	if err := syscall.Fstat(fd, &stat); err != nil {
-		return StatInfo{}, err
-	}
-	return StatInfo{
-		Mode: fs.FileMode(stat.Mode),
-		Size: stat.Size,
-	}, nil
-}
-
-func Fstat(fd int) (StatInfo, error) {
-	return FstatNoRaise(fd)
-}
-
 func StatPath(path string) (fs.FileInfo, error) {
 	return os.Stat(path)
 }
@@ -168,7 +152,7 @@ func OpenFile(path string, flag int, perm fs.FileMode) (*os.File, error) {
 	}
 	file := os.NewFile(uintptr(fd), path)
 	if file == nil {
-		syscall.Close(fd)
+		closeFD(fd)
 		return nil, errors.New("failed to wrap file descriptor")
 	}
 	return file, nil
@@ -181,7 +165,7 @@ func OpenFileNoRaise(path string, flag int, perm fs.FileMode) (*os.File, error) 
 	}
 	file := os.NewFile(uintptr(fd), path)
 	if file == nil {
-		syscall.Close(fd)
+		closeFD(fd)
 		return nil, errors.New("failed to wrap file descriptor")
 	}
 	return file, nil

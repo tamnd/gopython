@@ -3,12 +3,11 @@ package pyos
 import (
 	"math"
 	"runtime"
-	"syscall"
 )
 
 var (
-	readFDHook  = syscall.Read
-	writeFDHook = syscall.Write
+	readFDHook  = readFDPlatform
+	writeFDHook = writeFDPlatform
 )
 
 func ReadFD(fd int, buf []byte) (int, error) {
@@ -17,7 +16,7 @@ func ReadFD(fd int, buf []byte) (int, error) {
 	}
 	for {
 		n, err := readFDHook(fd, buf)
-		if err == syscall.EINTR {
+		if isInterrupted(err) {
 			continue
 		}
 		if err != nil {
@@ -41,7 +40,7 @@ func writeFDImpl(fd int, buf []byte, retryOnEINTR bool) (int, error) {
 	}
 	for {
 		n, err := writeFDHook(fd, buf)
-		if err == syscall.EINTR && retryOnEINTR {
+		if isInterrupted(err) && retryOnEINTR {
 			continue
 		}
 		if err != nil {
