@@ -55,6 +55,12 @@ func GetCwd() (string, error) {
 }
 
 func IsAbs(path string) bool {
+	if runtime.GOOS == "windows" && path != "" {
+		switch path[0] {
+		case '\\', '/':
+			return true
+		}
+	}
 	return filepath.IsAbs(path)
 }
 

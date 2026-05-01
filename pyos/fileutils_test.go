@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -407,11 +408,20 @@ func TestEncodeLocaleSurrogateEscape(t *testing.T) {
 func TestForceASCIIAndLocaleEncoding(t *testing.T) {
 	ResetForceASCII()
 	t.Setenv("LC_ALL", "C.ascii")
-	if got := GetForceASCII(); got != 1 {
-		t.Fatalf("GetForceASCII = %d, want 1", got)
-	}
-	if got := LocaleEncoding(); got != "ascii" {
-		t.Fatalf("LocaleEncoding = %q, want ascii", got)
+	if runtime.GOOS == "windows" {
+		if got := GetForceASCII(); got != 0 {
+			t.Fatalf("GetForceASCII = %d, want 0 on windows", got)
+		}
+		if got := LocaleEncoding(); got != "cp1252" {
+			t.Fatalf("LocaleEncoding = %q, want cp1252 on windows", got)
+		}
+	} else {
+		if got := GetForceASCII(); got != 1 {
+			t.Fatalf("GetForceASCII = %d, want 1", got)
+		}
+		if got := LocaleEncoding(); got != "ascii" {
+			t.Fatalf("LocaleEncoding = %q, want ascii", got)
+		}
 	}
 
 	ResetForceASCII()
