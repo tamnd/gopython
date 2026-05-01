@@ -157,7 +157,7 @@ func TestStartJoinableThreadAndJoin(t *testing.T) {
 
 	done := make(chan any, 1)
 	ident, handle, err := StartJoinableThread(func(arg any) {
-		done <- []any{arg, GetThreadIdentEx()}
+		done <- []any{arg, GetThreadIdentEx(), GetThreadNativeID(), GetThreadNativeID()}
 	}, "value")
 	if err != nil {
 		t.Fatalf("StartJoinableThread returned error: %v", err)
@@ -174,6 +174,12 @@ func TestStartJoinableThreadAndJoin(t *testing.T) {
 	}
 	if got[1] != ident {
 		t.Fatalf("thread ident in goroutine = %v, want %v", got[1], ident)
+	}
+	if got[2].(uint64) == 0 {
+		t.Fatal("thread native id should be non-zero")
+	}
+	if got[2] != got[3] {
+		t.Fatalf("thread native id changed within worker: %v then %v", got[2], got[3])
 	}
 }
 

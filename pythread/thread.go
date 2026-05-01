@@ -308,6 +308,8 @@ func StartJoinableThread(fn func(any), arg any) (ThreadIdent, *ThreadHandle, err
 	handle := &ThreadHandle{done: make(chan struct{})}
 	id := ThreadIdent(nextThreadID.Add(1))
 	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
 		gid := currentGoroutineID()
 		threadIDs.Store(gid, id)
 		defer threadIDs.Delete(gid)
