@@ -29,6 +29,14 @@ type PickleContext struct {
 	MainFile string
 }
 
+type UnpickleHooks struct {
+	Load                 func([]byte) (any, error)
+	EnsureIsolatedMain   func(filename string) error
+	ApplyIsolatedMain    func() error
+	RestoreMain          func()
+	CheckMissingMainAttr func(error) bool
+}
+
 type SharedPickleData struct {
 	Pickled []byte
 	Context PickleContext
@@ -49,16 +57,51 @@ func PickleToXIData(obj any, mainFile string, xid *XIData) error {
 	return nil
 }
 
+func SetPickleContext(mainFile string) PickleContext {
+	return PickleContext{MainFile: mainFile}
+}
+
+func LoadPickleWithContext(shared SharedPickleData, hooks UnpickleHooks) (any, error) {
+	if hooks.Load == nil {
+		var out any
+		if err := json.Unmarshal(shared.Pickled, &out); err != nil {
+			return nil, fmt.Errorf("object could not be unpickled: %w", err)
+		}
+		return out, nil
+	}
+	obj, err := hooks.Load(shared.Pickled)
+	if err == nil {
+		return obj, nil
+	}
+	checkMissing := hooks.CheckMissingMainAttr
+	if checkMissing == nil {
+		checkMissing = CheckMissingMainAttr
+	}
+	if shared.Context.MainFile == "" || !checkMissing(err) {
+		return nil, err
+	}
+	if hooks.EnsureIsolatedMain != nil {
+		if ensureErr := hooks.EnsureIsolatedMain(shared.Context.MainFile); ensureErr != nil {
+			return nil, ensureErr
+		}
+	}
+	if hooks.ApplyIsolatedMain != nil {
+		if applyErr := hooks.ApplyIsolatedMain(); applyErr != nil {
+			return nil, applyErr
+		}
+	}
+	if hooks.RestoreMain != nil {
+		defer hooks.RestoreMain()
+	}
+	return hooks.Load(shared.Pickled)
+}
+
 func LoadPickleFromXIData(xid *XIData) (any, error) {
 	shared, ok := xid.Data.(SharedPickleData)
 	if !ok {
 		return nil, fmt.Errorf("object could not be unpickled")
 	}
-	var out any
-	if err := json.Unmarshal(shared.Pickled, &out); err != nil {
-		return nil, fmt.Errorf("object could not be unpickled: %w", err)
-	}
-	return out, nil
+	return LoadPickleWithContext(shared, UnpickleHooks{})
 }
 
 func MarshalToXIData(obj any, xid *XIData) error {
