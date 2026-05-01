@@ -15,6 +15,7 @@ type SyncModule struct {
 
 type MainModuleHooks struct {
 	GetMainModule   func() (any, error)
+	GetMainFilename func() (string, error)
 	LoadFromPath    func(filename string, modname string) (any, error)
 	SetMainModule   func(module any) error
 	GetCachedModule func(name string) (any, error)
@@ -26,11 +27,24 @@ func (m *SyncModule) Clear() {
 	m.Cached = SyncModuleResult{}
 }
 
+func resolveMainFilename(main *SyncModule, hooks MainModuleHooks) string {
+	if main.Filename != "" {
+		return main.Filename
+	}
+	if hooks.GetMainFilename != nil {
+		if filename, err := hooks.GetMainFilename(); err == nil && filename != "" {
+			main.Filename = filename
+			return filename
+		}
+	}
+	return ""
+}
+
 func EnsureIsolatedMain(main *SyncModule, hooks MainModuleHooks) error {
 	if main.Cached.Failed != nil || main.Cached.Loaded != nil {
 		return nil
 	}
-	if main.Filename == "" {
+	if resolveMainFilename(main, hooks) == "" {
 		main.Cached.Failed = fmt.Errorf("not implemented")
 		return main.Cached.Failed
 	}

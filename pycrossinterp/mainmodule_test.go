@@ -89,6 +89,41 @@ func TestSyncModuleUsesInterpreterCache(t *testing.T) {
 	}
 }
 
+func TestSyncModuleResolvesFilenameFromHook(t *testing.T) {
+	current := "current"
+	main := &SyncModule{}
+	err := EnsureIsolatedMain(main, MainModuleHooks{
+		GetMainFilename: func() (string, error) { return "main.py", nil },
+		GetMainModule:   func() (any, error) { return current, nil },
+		LoadFromPath: func(filename string, modname string) (any, error) {
+			return filename + ":" + modname, nil
+		},
+		SetMainModule: func(module any) error {
+			current = module.(string)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("EnsureIsolatedMain returned error: %v", err)
+	}
+	if main.Filename != "main.py" {
+		t.Fatalf("main.Filename = %q", main.Filename)
+	}
+}
+
+func TestSyncModuleFilenameHookFailureFallsBackToNotImplemented(t *testing.T) {
+	main := &SyncModule{}
+	err := EnsureIsolatedMain(main, MainModuleHooks{
+		GetMainFilename: func() (string, error) { return "", errors.New("boom") },
+	})
+	if err == nil || err.Error() != "not implemented" {
+		t.Fatalf("EnsureIsolatedMain error = %v", err)
+	}
+	if main.Cached.Failed == nil || main.Cached.Failed.Error() != "not implemented" {
+		t.Fatalf("cached failure = %v", main.Cached.Failed)
+	}
+}
+
 func TestCheckMissingMainAttr(t *testing.T) {
 	if !CheckMissingMainAttr(errors.New("module '__main__' has no attribute 'x'")) {
 		t.Fatal("expected missing __main__ attr match")
