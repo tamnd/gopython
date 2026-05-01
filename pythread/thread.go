@@ -281,7 +281,7 @@ func GetThreadIdent() uint64 {
 }
 
 func GetThreadNativeID() uint64 {
-	return uint64(GetThreadIdentEx())
+	return currentNativeThreadID()
 }
 
 func ExitThread() {

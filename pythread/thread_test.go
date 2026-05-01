@@ -318,8 +318,13 @@ func TestTSSIsolationAcrossThreads(t *testing.T) {
 
 func TestThreadIdAndStackSize(t *testing.T) {
 	prev := currentThreadIdent
+	prevNative := currentNativeThreadID
 	currentThreadIdent = func() ThreadIdent { return 77 }
-	t.Cleanup(func() { currentThreadIdent = prev })
+	currentNativeThreadID = func() uint64 { return 88 }
+	t.Cleanup(func() {
+		currentThreadIdent = prev
+		currentNativeThreadID = prevNative
+	})
 
 	if got := GetThreadIdentEx(); got != 77 {
 		t.Fatalf("GetThreadIdentEx = %d, want 77", got)
@@ -327,8 +332,8 @@ func TestThreadIdAndStackSize(t *testing.T) {
 	if got := GetThreadIdent(); got != 77 {
 		t.Fatalf("GetThreadIdent = %d, want 77", got)
 	}
-	if got := GetThreadNativeID(); got != 77 {
-		t.Fatalf("GetThreadNativeID = %d, want 77", got)
+	if got := GetThreadNativeID(); got != 88 {
+		t.Fatalf("GetThreadNativeID = %d, want 88", got)
 	}
 	if SetStackSize(0) != 0 {
 		t.Fatal("SetStackSize(0) should reset to default")
