@@ -207,6 +207,14 @@ func WFopen(path []rune, mode string) (*os.File, error) {
 	return OpenFileNoRaise(nativePath, flags, perm)
 }
 
+func Fopen(path string, mode string) (*os.File, error) {
+	flags, perm, err := fopenMode(mode)
+	if err != nil {
+		return nil, err
+	}
+	return OpenFile(path, flags, perm)
+}
+
 func Fclose(file *os.File) error {
 	if file == nil {
 		return nil

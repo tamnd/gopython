@@ -246,6 +246,30 @@ func TestOpenFDNoRaiseAndWFopen(t *testing.T) {
 	}
 }
 
+func TestFopen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fopen.txt")
+	file, err := Fopen(path, "w+")
+	if err != nil {
+		t.Fatalf("Fopen returned error: %v", err)
+	}
+	if _, err := io.WriteString(file, "hello"); err != nil {
+		t.Fatalf("WriteString returned error: %v", err)
+	}
+	if _, err := file.Seek(0, 0); err != nil {
+		t.Fatalf("Seek returned error: %v", err)
+	}
+	data, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("ReadAll returned error: %v", err)
+	}
+	if string(data) != "hello" {
+		t.Fatalf("Fopen content = %q, want %q", string(data), "hello")
+	}
+	if err := Fclose(file); err != nil {
+		t.Fatalf("Fclose returned error: %v", err)
+	}
+}
+
 func TestReadFDAndWriteFD(t *testing.T) {
 	var pipeFDs [2]int
 	if err := syscall.Pipe(pipeFDs[:]); err != nil {
