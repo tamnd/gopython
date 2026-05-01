@@ -128,15 +128,40 @@ func EndInterpreter(interp *pystate.InterpreterState, thread *pystate.ThreadStat
 	if interp == nil {
 		return nil
 	}
-	if thread == nil {
+	if !interp.Ready {
 		pystate.DeleteInterpreter(interp.Runtime, interp)
 		return nil
+	}
+	runtime := interp.Runtime
+	cur := pystate.CurrentThreadState(runtime)
+	restore := (*pystate.ThreadState)(nil)
+	if save != nil {
+		restore = *save
+	}
+	if thread == nil {
+		if cur != nil && cur.Interp == interp {
+			thread = cur
+		} else {
+			thread = pystate.NewThreadState(interp)
+			thread.Whence = pyruntime.InterpreterWhenceFinalize
+			pystate.BindThread(thread, uint64(interp.ID+1), uint64(interp.ID+1))
+			restore = cur
+			pystate.BindGILState(runtime, thread)
+		}
+	} else if cur != thread {
+		if cur != nil && cur.Interp != interp {
+			restore = cur
+		}
+		pystate.BindGILState(runtime, thread)
 	}
 	if err := pyruntime.EndInterpreter(thread, hooks); err != nil {
 		return err
 	}
+	if restore != nil {
+		pystate.BindGILState(runtime, restore)
+	}
 	if save != nil {
-		*save = nil
+		*save = restore
 	}
 	return nil
 }

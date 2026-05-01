@@ -24,6 +24,7 @@ type ThreadState struct {
 type InterpreterState struct {
 	ID                int64
 	Runtime           *RuntimeState
+	Ready             bool
 	RunningMain       bool
 	Whence            int
 	Finalizing        bool
@@ -71,6 +72,7 @@ func (runtime *RuntimeState) NewInterpreter() *InterpreterState {
 	interp := &InterpreterState{
 		ID:      runtime.nextInterpreter,
 		Runtime: runtime,
+		Ready:   true,
 	}
 	runtime.nextInterpreter++
 	runtime.interpreters = append(runtime.interpreters, interp)

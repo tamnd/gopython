@@ -79,7 +79,7 @@ func TestInterpreterAPIWrappers(t *testing.T) {
 	if err := EndInterpreter(result.Interp, result.Thread, &save, pyruntime.FinalizeHooks{}); err != nil {
 		t.Fatalf("EndInterpreter wrapper error: %v", err)
 	}
-	if save != nil {
+	if save != mainThread {
 		t.Fatalf("save = %#v", save)
 	}
 }
@@ -101,5 +101,33 @@ func TestInterpreterAPIErrorWrap(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected wrapped creation error")
+	}
+}
+
+func TestEndInterpreterNotReadyAndNilThread(t *testing.T) {
+	runtime := pystate.NewRuntimeState()
+	runtime.Init(1)
+	mainInterp := runtime.NewInterpreter()
+	mainThread := pystate.NewThreadState(mainInterp)
+	pystate.BindThread(mainThread, 1, 1)
+	pystate.BindGILState(runtime, mainThread)
+	pystate.SetMainThreadState(runtime, mainThread)
+
+	notReady := runtime.NewInterpreter()
+	notReady.Ready = false
+	if err := EndInterpreter(notReady, nil, nil, pyruntime.FinalizeHooks{}); err != nil {
+		t.Fatalf("EndInterpreter not-ready error: %v", err)
+	}
+
+	other := runtime.NewInterpreter()
+	save := mainThread
+	if err := EndInterpreter(other, nil, &save, pyruntime.FinalizeHooks{}); err != nil {
+		t.Fatalf("EndInterpreter nil-thread error: %v", err)
+	}
+	if save != mainThread {
+		t.Fatalf("save = %#v", save)
+	}
+	if pystate.CurrentThreadState(runtime) != mainThread {
+		t.Fatalf("current = %#v", pystate.CurrentThreadState(runtime))
 	}
 }
