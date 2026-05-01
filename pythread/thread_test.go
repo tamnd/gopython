@@ -361,3 +361,12 @@ func TestThreadIdAndStackSize(t *testing.T) {
 		t.Fatal("SetStackSize(below min) should fail")
 	}
 }
+
+func TestNativeThreadIDNonZeroOnSupportedPlatforms(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" && runtime.GOOS != "windows" {
+		t.Skip("native thread id is only wired directly on this platform set")
+	}
+	if got := currentNativeThreadID(); got == 0 {
+		t.Fatal("native thread id should be non-zero on supported platforms")
+	}
+}
