@@ -46,3 +46,36 @@ func TestScriptToXIData(t *testing.T) {
 		t.Fatal("expected invalid pure script error")
 	}
 }
+
+func TestScriptCodeAndFunctionValidation(t *testing.T) {
+	x := NewXIData()
+	err := ScriptToXIData(ScriptCode{
+		Source:       "pass",
+		ReturnsValue: false,
+		Stateless:    true,
+		Checked:      true,
+	}, true, x)
+	if err != nil {
+		t.Fatalf("ScriptCode validation error: %v", err)
+	}
+	if got, err := x.NewObject(x); err != nil || got.(string) != "pass" {
+		t.Fatalf("script code new object = (%v, %v)", got, err)
+	}
+
+	if err := ScriptToXIData(ScriptCode{
+		Source:       "x = 1",
+		ArgCount:     1,
+		ReturnsValue: false,
+	}, false, NewXIData()); err == nil {
+		t.Fatal("expected arg validation error")
+	}
+	if err := ScriptToXIData(ScriptFunction{
+		Code: ScriptCode{
+			Source:       "value = 1",
+			ReturnsValue: false,
+		},
+		Stateless: false,
+	}, true, NewXIData()); err == nil {
+		t.Fatal("expected stateless function validation error")
+	}
+}

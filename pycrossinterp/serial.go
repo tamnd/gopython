@@ -6,6 +6,25 @@ import (
 	"strings"
 )
 
+type ScriptCode struct {
+	Source          string
+	Checked         bool
+	Pure            bool
+	ArgCount        int
+	PosOnlyArgCount int
+	KwOnlyArgCount  int
+	VarArgs         bool
+	VarKeywords     bool
+	ReturnsValue    bool
+	UsesGlobals     bool
+	Stateless       bool
+}
+
+type ScriptFunction struct {
+	Code      ScriptCode
+	Stateless bool
+}
+
 type PickleContext struct {
 	MainFile string
 }
@@ -66,15 +85,9 @@ func ReadMarshalFromXIData(xid *XIData) (any, error) {
 }
 
 func ScriptToXIData(obj any, pure bool, xid *XIData) error {
-	script, ok := obj.(string)
-	if !ok {
-		return fmt.Errorf("object not a valid script")
-	}
-	if pure && stringsContainsAny(script, []string{"global ", "nonlocal "}) {
-		return fmt.Errorf("object not a valid script")
-	}
-	if stringsContainsAny(script, []string{"return "}) {
-		return fmt.Errorf("object not a valid script")
+	script, err := normalizeScriptObject(obj, pure)
+	if err != nil {
+		return fmt.Errorf("object not a valid script: %w", err)
 	}
 	xid.Init(1, []byte(script), obj, func(v any) (any, error) {
 		return string(v.(*XIData).Data.([]byte)), nil
@@ -89,4 +102,51 @@ func stringsContainsAny(text string, needles []string) bool {
 		}
 	}
 	return false
+}
+
+func normalizeScriptObject(obj any, pure bool) (string, error) {
+	switch value := obj.(type) {
+	case string:
+		if pure && stringsContainsAny(value, []string{"global ", "nonlocal "}) {
+			return "", fmt.Errorf("uses globals")
+		}
+		if stringsContainsAny(value, []string{"return "}) {
+			return "", fmt.Errorf("returns value")
+		}
+		return value, nil
+	case ScriptCode:
+		if err := VerifyScript(value, pure); err != nil {
+			return "", err
+		}
+		return value.Source, nil
+	case ScriptFunction:
+		code := value.Code
+		if pure && !value.Stateless {
+			return "", fmt.Errorf("function is not stateless")
+		}
+		code.Checked = value.Stateless
+		code.Stateless = value.Stateless
+		if err := VerifyScript(code, pure); err != nil {
+			return "", err
+		}
+		return code.Source, nil
+	default:
+		return "", fmt.Errorf("unsupported script")
+	}
+}
+
+func VerifyScript(code ScriptCode, pure bool) error {
+	if pure && code.UsesGlobals {
+		return fmt.Errorf("uses globals")
+	}
+	if pure && !code.Checked && !code.Stateless {
+		return fmt.Errorf("not stateless")
+	}
+	if code.ArgCount > 0 || code.PosOnlyArgCount > 0 || code.KwOnlyArgCount > 0 || code.VarArgs || code.VarKeywords {
+		return fmt.Errorf("code with args not supported")
+	}
+	if code.ReturnsValue {
+		return fmt.Errorf("code that returns a value is not a script")
+	}
+	return nil
 }
