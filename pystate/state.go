@@ -18,6 +18,7 @@ type ThreadState struct {
 	ThreadID       uint64
 	NativeThreadID uint64
 	Whence         int
+	Dict           map[string]any
 	Status         ThreadStatus
 }
 
@@ -28,6 +29,10 @@ type InterpreterState struct {
 	RunningMain       bool
 	Whence            int
 	Finalizing        bool
+	MainModule        any
+	Dict              map[string]any
+	IDRefCount        int
+	RequiresIDRefFlag bool
 	ContextWatchers   [8]func(any) error
 	ActiveContextBits uint8
 	contextWatchersMu sync.Mutex
@@ -176,12 +181,56 @@ func DeleteInterpreter(runtime *RuntimeState, interp *InterpreterState) {
 	}
 }
 
+func RuntimeStateFini(runtime *RuntimeState) {
+	if runtime == nil {
+		return
+	}
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	runtime.initialized = false
+	runtime.mainThread = 0
+	runtime.interpreters = nil
+	runtime.main = nil
+	runtime.current = nil
+}
+
+func ClearInterpreter(interp *InterpreterState) {
+	if interp == nil {
+		return
+	}
+	interp.MainModule = nil
+	interp.Dict = nil
+	interp.RunningMain = false
+	interp.Finalizing = false
+	interp.Ready = false
+	interp.ActiveContextBits = 0
+	interp.ContextWatchers = [8]func(any) error{}
+}
+
+func ClearInterpreterFromThread(ts *ThreadState) {
+	if ts == nil {
+		return
+	}
+	ClearInterpreter(ts.Interp)
+}
+
+func DeleteInterpreterState(interp *InterpreterState) {
+	if interp == nil || interp.Runtime == nil {
+		return
+	}
+	DeleteInterpreter(interp.Runtime, interp)
+}
+
+func SetInterpreterAlreadyRunning() error {
+	return ErrInterpreterAlreadyRunning
+}
+
 func SetRunningMain(interp *InterpreterState) error {
 	if interp == nil {
 		return ErrNoInterpreter
 	}
 	if interp.RunningMain {
-		return nil
+		return ErrInterpreterAlreadyRunning
 	}
 	interp.RunningMain = true
 	return nil
@@ -191,6 +240,136 @@ func ClearRunningMain(interp *InterpreterState) {
 	if interp != nil {
 		interp.RunningMain = false
 	}
+}
+
+func IsRunningMain(interp *InterpreterState) bool {
+	return interp != nil && interp.RunningMain
+}
+
+func ThreadIsRunningMain(ts *ThreadState) bool {
+	return ts != nil && ts.Interp != nil && ts.Interp.RunningMain && ts == MainThreadState(ts.Interp.Runtime)
+}
+
+func ReinitRunningMain(ts *ThreadState) {
+	if ts == nil || ts.Interp == nil {
+		return
+	}
+	if !ThreadIsRunningMain(ts) {
+		ts.Interp.RunningMain = false
+	}
+}
+
+func IsInterpreterReady(interp *InterpreterState) bool {
+	return interp != nil && interp.Ready
+}
+
+func SetInterpreterWhence(interp *InterpreterState, whence int) {
+	if interp != nil {
+		interp.Whence = whence
+	}
+}
+
+func GetMainModule(ts *ThreadState) any {
+	if ts == nil || ts.Interp == nil {
+		return nil
+	}
+	return ts.Interp.MainModule
+}
+
+func CheckMainModule(module any) error {
+	if module == nil {
+		return ErrMainModuleNotFound
+	}
+	m, ok := module.(map[string]any)
+	if !ok {
+		return ErrInvalidMainModule
+	}
+	name, ok := m["__name__"].(string)
+	if !ok || name != "__main__" {
+		return ErrInvalidMainModule
+	}
+	return nil
+}
+
+func InterpreterGetDict(interp *InterpreterState) map[string]any {
+	if interp == nil {
+		return nil
+	}
+	if interp.Dict == nil {
+		interp.Dict = map[string]any{}
+	}
+	return interp.Dict
+}
+
+func ThreadGetDict(ts *ThreadState) map[string]any {
+	if ts == nil {
+		return nil
+	}
+	if ts.Dict == nil {
+		ts.Dict = map[string]any{}
+	}
+	return ts.Dict
+}
+
+func GetInterpreterIDObject(interp *InterpreterState) any {
+	if interp == nil || interp.ID < 0 {
+		return nil
+	}
+	return interp.ID
+}
+
+func InterpreterIDIncref(interp *InterpreterState) {
+	if interp != nil {
+		interp.IDRefCount++
+	}
+}
+
+func InterpreterIDDecref(interp *InterpreterState) {
+	if interp != nil && interp.IDRefCount > 0 {
+		interp.IDRefCount--
+	}
+}
+
+func InterpreterRequiresIDRef(interp *InterpreterState) bool {
+	return interp != nil && interp.RequiresIDRefFlag
+}
+
+func RequireInterpreterIDRef(interp *InterpreterState, required bool) {
+	if interp != nil {
+		interp.RequiresIDRefFlag = required
+	}
+}
+
+func AttachThread(ts *ThreadState) {
+	if ts != nil {
+		ts.Status.Active = true
+	}
+}
+
+func DetachThread(ts *ThreadState) {
+	if ts != nil {
+		ts.Status.Active = false
+	}
+}
+
+func SuspendThread(ts *ThreadState) {
+	if ts != nil {
+		ts.Status.Active = false
+	}
+}
+
+func SetThreadShuttingDown(ts *ThreadState) {
+	if ts != nil {
+		ts.Status.Finalizing = true
+	}
+}
+
+func IsMainThread(runtime *RuntimeState, ts *ThreadState) bool {
+	return runtime != nil && ts != nil && MainThreadState(runtime) == ts
+}
+
+func IsMainInterpreterFinalizing(interp *InterpreterState) bool {
+	return interp != nil && interp.Finalizing
 }
 
 func AddContextWatcher(interp *InterpreterState, cb func(any) error) (int, error) {

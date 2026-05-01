@@ -75,6 +75,25 @@ func TestPreConfigInitializers(t *testing.T) {
 	}
 }
 
+func TestPreConfigFromConfigHelpers(t *testing.T) {
+	var config Config
+	InitPythonConfig(&config)
+	config.ParseArgv = 1
+	config.DevMode = 1
+
+	var pre PreConfig
+	InitPreConfigFromConfig(&pre, &config)
+	if pre.ConfigInit != ConfigInitPython || pre.ParseArgv != 1 || pre.DevMode != 1 {
+		t.Fatalf("pre = %#v", pre)
+	}
+
+	var copied PreConfig
+	GetPreConfigFromConfig(&copied, &config)
+	if copied != pre {
+		t.Fatalf("copied = %#v pre = %#v", copied, pre)
+	}
+}
+
 func TestGetEnvHelpers(t *testing.T) {
 	t.Setenv("PYCONFIG_TEST_FLAG", "2")
 	flag := 0

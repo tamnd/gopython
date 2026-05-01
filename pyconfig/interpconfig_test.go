@@ -138,3 +138,25 @@ func TestInterpreterConfigInitFromState(t *testing.T) {
 		t.Fatalf("config = %#v", config)
 	}
 }
+
+func TestInterpreterConfigWrapperHelpers(t *testing.T) {
+	config := &InterpreterConfig{GIL: SharedGIL}
+	dict, err := InterpreterConfigAsMap(config)
+	if err != nil || dict["gil"] != "shared" {
+		t.Fatalf("InterpreterConfigAsMap = (%#v, %v)", dict, err)
+	}
+	if _, err := InterpreterConfigAsMap(nil); err == nil {
+		t.Fatal("expected nil config error")
+	}
+
+	var fromState InterpreterConfig
+	if err := InitInterpreterConfigFromState(&fromState, InterpreterStateSnapshot{OwnGIL: true}); err != nil {
+		t.Fatalf("InitInterpreterConfigFromState returned error: %v", err)
+	}
+	if fromState.GIL != OwnGIL {
+		t.Fatalf("fromState = %#v", fromState)
+	}
+	if err := InitInterpreterConfigFromState(nil, InterpreterStateSnapshot{}); err == nil {
+		t.Fatal("expected nil config error")
+	}
+}

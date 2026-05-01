@@ -144,6 +144,21 @@ func InitIsolatedPreConfig(config *PreConfig) {
 	config.LegacyWindowsFSEncoding = 0
 }
 
+func InitPreConfigFromConfig(preconfig *PreConfig, config *Config) {
+	if preconfig == nil || config == nil {
+		return
+	}
+	preconfig.ConfigInit = config.ConfigInit
+	preconfig.ParseArgv = config.ParseArgv
+	preconfig.Isolated = config.Isolated
+	preconfig.UseEnvironment = config.UseEnvironment
+	preconfig.DevMode = config.DevMode
+}
+
+func GetPreConfigFromConfig(preconfig *PreConfig, config *Config) {
+	InitPreConfigFromConfig(preconfig, config)
+}
+
 func (config PreConfig) AsMap() map[string]int {
 	return map[string]int{
 		"_config_init":               int(config.ConfigInit),

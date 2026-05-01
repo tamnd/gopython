@@ -63,6 +63,13 @@ func (config InterpreterConfig) AsMap() (map[string]any, error) {
 	}, nil
 }
 
+func InterpreterConfigAsMap(config *InterpreterConfig) (map[string]any, error) {
+	if config == nil {
+		return nil, fmt.Errorf("nil interpreter config")
+	}
+	return config.AsMap()
+}
+
 func InitInterpreterConfigFromMap(config *InterpreterConfig, dict map[string]any) error {
 	if config == nil {
 		return fmt.Errorf("nil interpreter config")
@@ -89,6 +96,14 @@ func (config *InterpreterConfig) InitFromState(interp InterpreterStateSnapshot) 
 	} else {
 		config.GIL = SharedGIL
 	}
+}
+
+func InitInterpreterConfigFromState(config *InterpreterConfig, interp InterpreterStateSnapshot) error {
+	if config == nil {
+		return fmt.Errorf("nil interpreter config")
+	}
+	config.InitFromState(interp)
+	return nil
 }
 
 func interpreterConfigFromMap(config *InterpreterConfig, dict map[string]any, missingAllowed bool) error {

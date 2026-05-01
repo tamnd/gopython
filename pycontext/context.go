@@ -55,6 +55,10 @@ func New() *Context {
 	return newEmptyContext()
 }
 
+func NewHamtForTests() map[*Var]any {
+	return map[*Var]any{}
+}
+
 func Copy(ctx *Context) *Context {
 	if ctx == nil {
 		return nil

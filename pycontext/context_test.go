@@ -128,3 +128,10 @@ func TestInitModule(t *testing.T) {
 		t.Fatalf("module = %#v", module)
 	}
 }
+
+func TestNewHamtForTests(t *testing.T) {
+	hamt := NewHamtForTests()
+	if hamt == nil || len(hamt) != 0 {
+		t.Fatalf("hamt = %#v", hamt)
+	}
+}
